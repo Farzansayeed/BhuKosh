@@ -45,19 +45,24 @@ def tokens() -> dict[str, str]:
 @pytest.fixture(autouse=True)
 def sandbox(monkeypatch, tmp_path):
     monkeypatch.setattr(get_settings(), "data_dir", str(tmp_path / "data"))
+
+    def _clean():
+        with psycopg.connect(conninfo()) as conn:
+            conn.execute(
+                """DELETE FROM pages WHERE document_id IN (
+                       SELECT id FROM documents WHERE manifest_id IN (
+                           SELECT id FROM intake_manifests WHERE register_ref LIKE 'TEST-%'))"""
+            )
+            conn.execute(
+                """DELETE FROM documents WHERE manifest_id IN (
+                       SELECT id FROM intake_manifests WHERE register_ref LIKE 'TEST-%')"""
+            )
+            conn.execute("DELETE FROM intake_manifests WHERE register_ref LIKE 'TEST-%'")
+            conn.commit()
+
+    _clean()  # pre-clean: a killed run must never poison the next one
     yield
-    with psycopg.connect(conninfo()) as conn:
-        conn.execute(
-            """DELETE FROM pages WHERE document_id IN (
-                   SELECT id FROM documents WHERE manifest_id IN (
-                       SELECT id FROM intake_manifests WHERE register_ref LIKE 'TEST-%'))"""
-        )
-        conn.execute(
-            """DELETE FROM documents WHERE manifest_id IN (
-                   SELECT id FROM intake_manifests WHERE register_ref LIKE 'TEST-%')"""
-        )
-        conn.execute("DELETE FROM intake_manifests WHERE register_ref LIKE 'TEST-%'")
-        conn.commit()
+    _clean()
 
 
 def _make_manifest(tok: str, expected_count: int = 1, page_hashes: list[str] | None = None) -> dict:

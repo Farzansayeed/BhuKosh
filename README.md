@@ -61,5 +61,6 @@ gitignored — never commit real credentials.
 - [x] EXTRACTION (prototype slice) — /extract with server-held Gemini key, per-user rate limit, usage log
 - [x] CUSTODY + EVIDENCE — intake manifests, documents (SHA-256 dedup 409), pages, evidence_crops, content-addressed storage, manifest verification
 - [x] PROCESSING — evidence-bound extraction runs (processing_runs, candidates), raw-output preservation, shared rate-limit bucket
-- [ ] DATA MODEL — remaining tables (projections, decisions, validation, anomalies, audit, exports)
-- [ ] VALIDATION → REVIEW → REASONING → AUDIT → EXPORT → EVALUATION → DEMO
+- [x] PROJECTIONS + DECISIONS — land_records/field_values state machine, apply_decision() single write path, claim lock (423) + optimistic versioning (409), human_decisions append-only
+- [ ] DATA MODEL — remaining tables (validation_results, anomalies, audit_events, exports)
+- [ ] VALIDATION → REVIEW QUEUE → AUDIT → EXPORT → EVALUATION → DEMO
