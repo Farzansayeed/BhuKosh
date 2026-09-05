@@ -1,0 +1,245 @@
+"""PROCESSING acceptance tests.
+
+Engine is stubbed (no real Gemini calls): the app-under-test path is real
+— run rows, candidates, storage of raw output, sanitized failures, shared
+rate-limit bucket. DB rows are cleaned via the TEST- manifest prefix.
+"""
+import hashlib
+import json
+import time
+
+import psycopg
+import pytest
+from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
+
+from app.config import get_settings
+from app.db import conninfo
+from app.main import app
+
+client = TestClient(app)
+
+PASSWORDS = {
+    "admin": "bhukosh-admin",
+    "operator": "operator-dev",
+    "checker": "checker-dev",
+    "certifier": "certifier-dev",
+    "auditor": "auditor-dev",
+}
+
+PNG1 = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+    "0000000a49444154789c636000010000000500010d0a2db40000000049454e44ae426082"
+)
+PNG2 = b"\x89PNG\r\n\x1a\n" + b"page-2-payload"
+
+CANNED = {
+    "khasra_no": "२३४",
+    "owner_name": None,  # engine refused to guess → is_unknown candidate
+    "area_raw": "२-४० bigha",
+    "village": "सलेमपुर",
+}
+
+
+@pytest.fixture(scope="module")
+def tokens() -> dict[str, str]:
+    return {
+        role: client.post("/auth/login", json={"username": role, "password": pwd}).json()["access_token"]
+        for role, pwd in PASSWORDS.items()
+    }
+
+
+@pytest.fixture(autouse=True)
+def sandbox(monkeypatch, tmp_path):
+    monkeypatch.setattr(get_settings(), "data_dir", str(tmp_path / "data"))
+    cap = {"id": 0}
+    with psycopg.connect(conninfo()) as conn:
+        cap["id"] = conn.execute("SELECT COALESCE(max(id), 0) AS m FROM api_usage").fetchone()[0]
+    yield
+    with psycopg.connect(conninfo()) as conn:
+        conn.execute(
+            """DELETE FROM candidates WHERE run_id IN (
+                   SELECT r.id FROM processing_runs r
+                   JOIN documents d ON d.id = r.document_id
+                   JOIN intake_manifests m ON m.id = d.manifest_id
+                   WHERE m.register_ref LIKE 'TEST-%')"""
+        )
+        conn.execute(
+            """DELETE FROM processing_runs WHERE document_id IN (
+                   SELECT d.id FROM documents d
+                   JOIN intake_manifests m ON m.id = d.manifest_id
+                   WHERE m.register_ref LIKE 'TEST-%')"""
+        )
+        conn.execute(
+            """DELETE FROM pages WHERE document_id IN (
+                   SELECT d.id FROM documents d
+                   JOIN intake_manifests m ON m.id = d.manifest_id
+                   WHERE m.register_ref LIKE 'TEST-%')"""
+        )
+        conn.execute(
+            """DELETE FROM documents WHERE manifest_id IN (
+                   SELECT id FROM intake_manifests WHERE register_ref LIKE 'TEST-%')"""
+        )
+        conn.execute("DELETE FROM intake_manifests WHERE register_ref LIKE 'TEST-%'")
+        conn.execute("DELETE FROM api_usage WHERE id > %s OR model = 'test-stub'", (cap["id"],))
+        conn.commit()
+
+
+def _make_doc_with_page(tok: str, content: bytes | None = None) -> dict:
+    # documents.sha256 and intake_manifests.manifest_hash are both globally unique,
+    # so every call needs unique page bytes AND a unique manifest body.
+    if content is None:
+        content = b"\x89PNG\r\n\x1a\n" + hashlib.sha256(str(time.time_ns()).encode()).digest()
+    m = client.post(
+        "/intake",
+        json={"register_ref": f"TEST-KH-{time.time_ns()}", "centre": "c", "device": "d", "expected_count": 1},
+        headers={"Authorization": f"Bearer {tok}"},
+    ).json()
+    d = client.post(
+        "/documents",
+        data={"manifest_id": str(m["id"])},
+        files={"file": ("t.png", content, "image/png")},
+        headers={"Authorization": f"Bearer {tok}"},
+    ).json()
+    p = client.post(
+        f"/documents/{d['id']}/pages",
+        json={"seq_no": 1, "sha256": d["sha256"]},
+        headers={"Authorization": f"Bearer {tok}"},
+    ).json()
+    return {"manifest": m, "document": d, "page": p}
+
+
+def _extract(tok: str, doc_id: int, **json) -> object:
+    return client.post(
+        f"/documents/{doc_id}/extract",
+        json=json or {"text": "khasra २३४ test record"},
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+
+
+def test_run_requires_auth():
+    r = client.post("/documents/1/extract", json={"text": "x"})
+    assert r.status_code == 401
+    assert r.headers["content-type"].startswith("application/problem+json")
+
+
+def test_run_forbidden_for_auditor(tokens):
+    r = _extract(tokens["auditor"], 1)
+    assert r.status_code == 403
+
+
+def test_unknown_document_and_bad_page(tokens):
+    assert _extract(tokens["operator"], 999999).status_code == 404
+    combo = _make_doc_with_page(tokens["operator"])
+    other = _make_doc_with_page(tokens["operator"], PNG2)
+    r = _extract(tokens["operator"], combo["document"]["id"], text="x", page_id=other["page"]["id"])
+    assert r.status_code == 422
+
+
+def test_run_lifecycle_with_stubbed_engine(tokens, monkeypatch):
+    from app.extract import gemini_client
+
+    monkeypatch.setattr(gemini_client, "structured_extract", lambda text, schema, **kw: dict(CANNED))
+    combo = _make_doc_with_page(tokens["operator"])
+
+    r = _extract(tokens["operator"], combo["document"]["id"], text="khasra २३४", page_id=combo["page"]["id"])
+    assert r.status_code == 201, r.text
+    payload = r.json()
+    run, cands = payload["run"], payload["candidates"]
+
+    assert run["status"] == "SUCCEEDED"
+    assert run["kind"] == "EXTRACT"
+    assert run["engine_name"] == "gemini"
+    assert run["prompt_id"] == "khasra_register"
+    assert run["page_id"] == combo["page"]["id"]
+    assert run["raw_output_uri"].startswith("file:")
+    assert run["finished_at"] is not None
+
+    assert len(cands) == 4
+    by_field = {c["field_type"]: c for c in cands}
+    assert by_field["khasra_no"]["value"] == "२३४"
+    assert by_field["khasra_no"]["is_unknown"] is False
+    assert by_field["owner_name"]["is_unknown"] is True  # engine said null → UNKNOWN, not a guess
+    assert all(c["nbest_rank"] == 1 for c in cands)
+
+    # raw output preserved and readable, contains the full provenance envelope
+    from app.storage import open_uri
+    raw = json.loads(open_uri(run["raw_output_uri"]))
+    assert raw["run_id"] == run["id"]
+    assert raw["result"] == CANNED
+    assert raw["input_sha256"] == run["input_hash"]
+
+    # usage logged under the shared /extraction bucket
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        n = conn.execute(
+            "SELECT count(*) AS n FROM api_usage WHERE route = '/extraction' AND username = 'operator' AND status = 'ok'"
+        ).fetchone()["n"]
+    assert n >= 1
+
+
+def test_failed_run_sanitizes_error(tokens, monkeypatch):
+    from app.extract import gemini_client
+
+    def boom(text, schema, **kw):
+        raise RuntimeError("SECRET upstream body xyz")
+
+    monkeypatch.setattr(gemini_client, "structured_extract", boom)
+    combo = _make_doc_with_page(tokens["operator"], PNG2)
+    quiet = TestClient(app, raise_server_exceptions=False)
+    r = quiet.post(
+        f"/documents/{combo['document']['id']}/extract",
+        json={"text": "x"},
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert r.status_code == 500
+    assert "SECRET" not in r.text
+
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        run = conn.execute(
+            "SELECT status, error FROM processing_runs WHERE document_id = %s "
+            "ORDER BY id DESC LIMIT 1",
+            (combo["document"]["id"],),
+        ).fetchone()
+    assert run["status"] == "FAILED"
+    assert run["error"] == "RuntimeError"  # class name only — no upstream detail
+
+
+def test_rate_limit_shared_with_prototype_route(tokens):
+    limit = get_settings().extract_rate_limit_per_min
+    with psycopg.connect(conninfo()) as conn:
+        for _ in range(limit):
+            conn.execute(
+                "INSERT INTO api_usage (username, route, status, model) "
+                "VALUES ('operator', '/extraction', 'ok', 'test-stub')"
+            )
+        conn.commit()
+    combo = _make_doc_with_page(tokens["operator"], PNG2)
+    r = _extract(tokens["operator"], combo["document"]["id"], text="x")
+    assert r.status_code == 429
+    assert r.headers["Retry-After"] == str(get_settings().extract_rate_window_seconds)
+
+
+def test_get_run_and_list_runs(tokens, monkeypatch):
+    from app.extract import gemini_client
+
+    monkeypatch.setattr(gemini_client, "structured_extract", lambda text, schema, **kw: dict(CANNED))
+    combo = _make_doc_with_page(tokens["operator"], PNG2)
+    created = _extract(tokens["operator"], combo["document"]["id"], text="x").json()
+
+    r = client.get(
+        f"/extraction/runs/{created['run']['id']}",
+        headers={"Authorization": f"Bearer {tokens['auditor']}"},
+    )
+    assert r.status_code == 200
+    assert len(r.json()["candidates"]) == 4
+
+    r = client.get(
+        f"/documents/{combo['document']['id']}/runs",
+        headers={"Authorization": f"Bearer {tokens['checker']}"},
+    )
+    assert r.status_code == 200
+    assert any(row["id"] == created["run"]["id"] for row in r.json())
+
+    assert client.get(
+        "/extraction/runs/999999", headers={"Authorization": f"Bearer {tokens['operator']}"}
+    ).status_code == 404

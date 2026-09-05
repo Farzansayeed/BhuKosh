@@ -60,5 +60,6 @@ gitignored — never commit real credentials.
 - [x] FOUNDATION — repo, portable Postgres, config, auth (JWT + RBAC), health, authz tests
 - [x] EXTRACTION (prototype slice) — /extract with server-held Gemini key, per-user rate limit, usage log
 - [x] CUSTODY + EVIDENCE — intake manifests, documents (SHA-256 dedup 409), pages, evidence_crops, content-addressed storage, manifest verification
-- [ ] DATA MODEL — remaining tables (processing_runs, candidates, projections, decisions, validation, anomalies, audit, exports)
-- [ ] PROCESSING → VALIDATION → REVIEW → REASONING → AUDIT → EXPORT → EVALUATION → DEMO
+- [x] PROCESSING — evidence-bound extraction runs (processing_runs, candidates), raw-output preservation, shared rate-limit bucket
+- [ ] DATA MODEL — remaining tables (projections, decisions, validation, anomalies, audit, exports)
+- [ ] VALIDATION → REVIEW → REASONING → AUDIT → EXPORT → EVALUATION → DEMO

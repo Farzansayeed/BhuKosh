@@ -14,32 +14,13 @@ from ..auth.dependencies import require_roles
 from ..config import get_settings
 from ..db import conninfo
 from . import gemini_client, rate_limit
+from .schema import KHASRA_SCHEMA, PROMPT  # re-exported for probe scripts
 
 router = APIRouter(prefix="/extract", tags=["extract"])
 
-# Land-record register fields (prototype scope; grows with the full EXTRACTION stage).
-KHASRA_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "khasra_no": {"type": "STRING", "nullable": True},
-        "owner_name": {"type": "STRING", "nullable": True},
-        "area_raw": {"type": "STRING", "nullable": True},
-        "village": {"type": "STRING", "nullable": True},
-    },
-    "required": ["khasra_no", "owner_name", "area_raw"],
-}
-
-PROMPT = (
-    "You are reading a line/section from an Indian land-record register "
-    "(khatauni/jamabandi), possibly handwritten or Hindi/English mixed. "
-    "Extract exactly these fields from the record text below:\n"
-    "- khasra_no: the khewat/khasra/gata number (खसरा/खेवट/गाता नंबर)\n"
-    "- owner_name: the cultivator/owner name (किसान/स्वामी/खातेदार का नाम)\n"
-    "- area_raw: the land area exactly as printed (रकबा/क्षेत्रफल, e.g. '२-४० bigha')\n"
-    "- village: the village name (गाँव/मौजा)\n"
-    "Keep each value in its printed script (Devanagari stays Devanagari). "
-    "If a field is unreadable or absent, return null for it instead of guessing."
-)
+# The prototype route shares the same engine-call budget as evidence-bound
+# processing runs — one shared Gemini key means one shared quota bucket.
+RATE_ROUTE = "/extraction"
 
 
 class ExtractIn(BaseModel):
@@ -51,7 +32,7 @@ def extract(
     body: ExtractIn,
     user: dict = Depends(require_roles("operator", "checker", "certifier", "admin")),
 ) -> dict:
-    rate_limit.enforce(user["username"])
+    rate_limit.enforce(user["username"], route=RATE_ROUTE)
 
     parsed: dict | None = None
     status = "ok"
@@ -66,9 +47,10 @@ def extract(
             with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
                 conn.execute(
                     """INSERT INTO api_usage (username, route, status, model, prompt_chars, result_json)
-                       VALUES (%s, '/extract', %s, %s, %s, %s)""",
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
                     (
                         user["username"],
+                        RATE_ROUTE,
                         status,
                         get_settings().gemini_model,
                         len(body.text),

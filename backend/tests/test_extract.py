@@ -68,7 +68,7 @@ def test_extract_rate_limited(tokens):
         for _ in range(limit):
             conn.execute(
                 "INSERT INTO api_usage (username, route, status, model) "
-                "VALUES ('operator', '/extract', 'ok', 'test-stub')"
+                "VALUES ('operator', '/extraction', 'ok', 'test-stub')"
             )
         conn.commit()
     r = client.post(

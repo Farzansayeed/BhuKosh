@@ -9,6 +9,7 @@ from .custody.router import router as custody_router
 from .db import conninfo
 from .errors import Problem, problem_handler, validation_handler
 from .extract.router import router as extract_router
+from .processing.router import router as processing_router
 
 settings = get_settings()
 
@@ -18,6 +19,7 @@ app.add_exception_handler(RequestValidationError, validation_handler)
 app.include_router(auth_router)
 app.include_router(extract_router)
 app.include_router(custody_router)
+app.include_router(processing_router)
 
 
 @app.get("/health")
