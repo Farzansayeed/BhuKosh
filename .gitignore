@@ -1,0 +1,35 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- Environment & secrets (never commit) ---
+.env
+.env.*
+!.env.example
+data/keys/
+*.pem
+
+# --- Data (local DB cluster, portable binaries, downloads) ---
+data/
+infra/pgdata/
+infra/pg16/
+infra/*.zip
+
+# --- Node / frontend ---
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# --- Logs & OS junk ---
+logs/
+*.log
+.DS_Store
+Thumbs.db
