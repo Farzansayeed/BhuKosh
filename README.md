@@ -63,5 +63,7 @@ gitignored — never commit real credentials.
 - [x] PROCESSING — evidence-bound extraction runs (processing_runs, candidates), raw-output preservation, shared rate-limit bucket
 - [x] PROJECTIONS + DECISIONS — land_records/field_values state machine, apply_decision() single write path, claim lock (423) + optimistic versioning (409), human_decisions append-only
 - [x] VALIDATION — versioned deterministic rule registry (UP-profile v1), validation_results + anomalies, cross-document area-jump join, audited anomaly resolution, system auto-resolution on re-validation
-- [ ] DATA MODEL — remaining tables (audit_events, exports)
-- [ ] AUDIT → EXPORT → REVIEW QUEUE → EVALUATION → DEMO
+- [x] AUDIT — hash-chained audit_events (trigger-enforced append-only), emitted in the decision transaction, /audit/events + chain-head + verify
+- [x] EXPORTS — immutable JSON/CSV snapshots with evidence manifest (document hashes, rulebook version, decision trail), trigger-enforced
+- [x] DATA MODEL COMPLETE — all 14 core tables of plan §5
+- [ ] REMAINING: review-queue ranking, evidence-replay endpoints, UI, evaluation, demo

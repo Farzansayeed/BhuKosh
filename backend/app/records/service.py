@@ -13,6 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from ..audit import service as audit_service
 from ..db import conninfo
 from ..errors import Problem
 
@@ -209,6 +210,12 @@ def apply_decision(user: dict, record_id: int, payload: dict) -> dict:
              Jsonb({"record_state": target}),
              reason or None, user["username"], user["role"], rec["record_version"]),
         ).fetchone()
+        audit_service.append(
+            conn, user["username"], f"record.{dtype}",
+            {"record_id": record_id, "decision_id": decision["id"],
+             "from_state": rec["current_state"], "to_state": target,
+             "record_version": rec["record_version"]},
+        )
         conn.execute(
             "UPDATE land_records SET current_state = %s, record_version = record_version + 1 "
             "WHERE id = %s",
@@ -270,6 +277,11 @@ def _apply_anomaly_resolution(user: dict, record_id: int, payload: dict) -> dict
                resolved_reason = %s, resolved_at = now() WHERE id = %s""",
             (user["username"], reason, anomaly_id),
         )
+        audit_service.append(
+            conn, user["username"], "record.ANOMALY_RESOLVE",
+            {"record_id": record_id, "decision_id": decision["id"], "anomaly_id": anomaly_id,
+             "rule_id": anomaly["rule_id"], "record_version": rec["record_version"]},
+        )
         conn.execute(
             "UPDATE land_records SET record_version = record_version + 1 WHERE id = %s",
             (record_id,),
@@ -330,6 +342,12 @@ def _apply_correction(user: dict, record_id: int, payload: dict) -> dict:
                SET current_value = %s, state = 'CORRECTED', updated_by_decision = %s
                WHERE id = %s""",
             (new_value.strip(), decision["id"], field_id),
+        )
+        audit_service.append(
+            conn, user["username"], "record.CORRECTION",
+            {"record_id": record_id, "decision_id": decision["id"], "field_id": field_id,
+             "before": field["current_value"], "after": new_value.strip(),
+             "record_version": rec["record_version"]},
         )
         conn.execute(
             "UPDATE land_records SET record_version = record_version + 1 WHERE id = %s",

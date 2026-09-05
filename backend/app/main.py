@@ -3,12 +3,14 @@ import psycopg
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
+from .audit.router import router as audit_router
 from .auth.router import router as auth_router
 from .config import get_settings
 from .custody.router import router as custody_router
 from .db import conninfo
 from .errors import Problem, problem_handler, validation_handler
 from .extract.router import router as extract_router
+from .exports.router import router as exports_router
 from .processing.router import router as processing_router
 from .records.router import router as records_router
 from .rules.router import router as validation_router
@@ -24,6 +26,8 @@ app.include_router(custody_router)
 app.include_router(processing_router)
 app.include_router(records_router)
 app.include_router(validation_router)
+app.include_router(audit_router)
+app.include_router(exports_router)
 
 
 @app.get("/health")
