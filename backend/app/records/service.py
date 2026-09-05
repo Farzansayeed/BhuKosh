@@ -150,10 +150,13 @@ def apply_decision(user: dict, record_id: int, payload: dict) -> dict:
     dtype = payload.get("decision_type", "")
     if dtype == "CORRECTION":
         return _apply_correction(user, record_id, payload)
+    if dtype == "ANOMALY_RESOLVE":
+        return _apply_anomaly_resolution(user, record_id, payload)
     spec = DECISIONS.get(dtype)
     if not spec:
         raise Problem(422, "Validation Failed",
-                      f"decision_type must be one of {sorted(list(DECISIONS) + ['CORRECTION'])}.")
+                      f"decision_type must be one of "
+                      f"{sorted(list(DECISIONS) + ['CORRECTION', 'ANOMALY_RESOLVE'])}.")
     from_states, target, roles, reason_required = spec
     if user["role"] not in roles:
         raise Problem(403, "Forbidden", f"Role '{user['role']}' cannot perform {dtype}.")
@@ -210,6 +213,66 @@ def apply_decision(user: dict, record_id: int, payload: dict) -> dict:
             "UPDATE land_records SET current_state = %s, record_version = record_version + 1 "
             "WHERE id = %s",
             (target, record_id),
+        )
+        conn.commit()
+        rec = conn.execute("SELECT * FROM land_records WHERE id = %s", (record_id,)).fetchone()
+    return {"record": dict(rec), "decision": dict(decision)}
+
+
+def _apply_anomaly_resolution(user: dict, record_id: int, payload: dict) -> dict:
+    """Resolve an OPEN anomaly on this record — no state change, version bumps,
+    reason mandatory (plan §5 table 12: RESOLVE requires reason)."""
+    if user["role"] not in DECIDE_ROLES:
+        raise Problem(403, "Forbidden", f"Role '{user['role']}' cannot resolve anomalies.")
+    reason = (payload.get("reason") or "").strip()
+    if not reason:
+        raise Problem(422, "Validation Failed", "ANOMALY_RESOLVE requires a reason.")
+    anomaly_id = payload.get("anomaly_id")
+    if not anomaly_id:
+        raise Problem(422, "Validation Failed", "ANOMALY_RESOLVE requires anomaly_id.")
+
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        rec = conn.execute(
+            "SELECT * FROM land_records WHERE id = %s FOR UPDATE", (record_id,)
+        ).fetchone()
+        if not rec:
+            raise Problem(404, "Not Found", "No such record.")
+        if rec["record_version"] != payload.get("expected_version"):
+            raise Problem(
+                409, "Conflict",
+                f"Stale record_version: expected {payload.get('expected_version')}, "
+                f"current {rec['record_version']}.",
+                current_version=rec["record_version"],
+            )
+        if _claim_active(rec) and rec["claim_owner"] != user["username"]:
+            raise Problem(423, "Locked", f"Record is claimed by '{rec['claim_owner']}'.")
+        anomaly = conn.execute(
+            "SELECT * FROM anomalies WHERE id = %s AND record_id = %s",
+            (anomaly_id, record_id),
+        ).fetchone()
+        if not anomaly:
+            raise Problem(404, "Not Found", "No such anomaly on this record.")
+        if anomaly["status"] != "OPEN":
+            raise Problem(409, "Conflict", "Anomaly is already resolved.")
+
+        decision = conn.execute(
+            """INSERT INTO human_decisions
+                 (record_id, decision_type, before_value, after_value, reason,
+                  actor_id, actor_role, record_version)
+               VALUES (%s, 'ANOMALY_RESOLVE', %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (record_id,
+             Jsonb({"anomaly_id": anomaly_id, "status": "OPEN"}),
+             Jsonb({"anomaly_id": anomaly_id, "status": "RESOLVED"}),
+             reason, user["username"], user["role"], rec["record_version"]),
+        ).fetchone()
+        conn.execute(
+            """UPDATE anomalies SET status = 'RESOLVED', resolved_by = %s,
+               resolved_reason = %s, resolved_at = now() WHERE id = %s""",
+            (user["username"], reason, anomaly_id),
+        )
+        conn.execute(
+            "UPDATE land_records SET record_version = record_version + 1 WHERE id = %s",
+            (record_id,),
         )
         conn.commit()
         rec = conn.execute("SELECT * FROM land_records WHERE id = %s", (record_id,)).fetchone()

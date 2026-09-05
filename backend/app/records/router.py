@@ -24,6 +24,7 @@ class DecisionIn(BaseModel):
     decision_type: str
     expected_version: int = Field(ge=1)
     field_id: int | None = None
+    anomaly_id: int | None = None
     after_value: str | None = Field(default=None, max_length=2000)
     reason: str | None = Field(default=None, max_length=2000)
 

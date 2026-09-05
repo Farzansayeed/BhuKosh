@@ -62,5 +62,6 @@ gitignored — never commit real credentials.
 - [x] CUSTODY + EVIDENCE — intake manifests, documents (SHA-256 dedup 409), pages, evidence_crops, content-addressed storage, manifest verification
 - [x] PROCESSING — evidence-bound extraction runs (processing_runs, candidates), raw-output preservation, shared rate-limit bucket
 - [x] PROJECTIONS + DECISIONS — land_records/field_values state machine, apply_decision() single write path, claim lock (423) + optimistic versioning (409), human_decisions append-only
-- [ ] DATA MODEL — remaining tables (validation_results, anomalies, audit_events, exports)
-- [ ] VALIDATION → REVIEW QUEUE → AUDIT → EXPORT → EVALUATION → DEMO
+- [x] VALIDATION — versioned deterministic rule registry (UP-profile v1), validation_results + anomalies, cross-document area-jump join, audited anomaly resolution, system auto-resolution on re-validation
+- [ ] DATA MODEL — remaining tables (audit_events, exports)
+- [ ] AUDIT → EXPORT → REVIEW QUEUE → EVALUATION → DEMO
