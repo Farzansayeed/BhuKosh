@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     extract_rate_limit_per_min: int = 5
     extract_rate_window_seconds: int = 60
 
+    # Custody / storage
+    data_dir: str = "../data"
+    max_upload_bytes: int = 50 * 1024 * 1024  # 50 MB
+
 
 @lru_cache
 def get_settings() -> Settings:

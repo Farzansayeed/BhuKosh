@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 
 from .auth.router import router as auth_router
 from .config import get_settings
+from .custody.router import router as custody_router
 from .db import conninfo
 from .errors import Problem, problem_handler, validation_handler
 from .extract.router import router as extract_router
@@ -16,6 +17,7 @@ app.add_exception_handler(Problem, problem_handler)
 app.add_exception_handler(RequestValidationError, validation_handler)
 app.include_router(auth_router)
 app.include_router(extract_router)
+app.include_router(custody_router)
 
 
 @app.get("/health")
