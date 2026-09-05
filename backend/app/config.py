@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.6-flash"
 
+    # /extract per-user rate limit (sliding window over successful calls)
+    extract_rate_limit_per_min: int = 5
+    extract_rate_window_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

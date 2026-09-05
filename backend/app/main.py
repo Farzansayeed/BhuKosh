@@ -1,17 +1,21 @@
 import psycopg
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 
 from .auth.router import router as auth_router
 from .config import get_settings
 from .db import conninfo
-from .errors import Problem, problem_handler
+from .errors import Problem, problem_handler, validation_handler
+from .extract.router import router as extract_router
 
 settings = get_settings()
 
 app = FastAPI(title=settings.app_name, version="0.1.0")
 app.add_exception_handler(Problem, problem_handler)
+app.add_exception_handler(RequestValidationError, validation_handler)
 app.include_router(auth_router)
+app.include_router(extract_router)
 
 
 @app.get("/health")

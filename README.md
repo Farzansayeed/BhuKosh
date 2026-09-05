@@ -30,6 +30,15 @@ Dev users (seeded by `scripts/seed_users.py`): `admin/bhukosh-admin`, `operator/
 
 Tests: `cd backend && .venv/Scripts/python -m pytest -q`
 
+## AI extraction (prototype slice)
+
+`POST /extract` — JWT-authenticated (roles: operator/checker/certifier/admin). Send `{"text": "<register line>"}`;
+returns schema-locked JSON (`khasra_no`, `owner_name`, `area_raw`, `village`) with Devanagari preserved.
+The **Gemini key lives only on the server** — clients never see it. Per-user sliding-window rate limit
+(default 5/min, tunable via `EXTRACT_RATE_LIMIT_*` in `.env`), usage logged to `api_usage`.
+
+Health checks: `python -m scripts.check_db` · `python -m scripts.check_gemini` · engine probe: `python -m scripts.probe_extract`
+
 ## Database: local (offline) vs Supabase (shared dev)
 
 The app picks its database from `.env`:
@@ -49,5 +58,6 @@ gitignored — never commit real credentials.
 ## Status
 
 - [x] FOUNDATION — repo, portable Postgres, config, auth (JWT + RBAC), health, authz tests
+- [x] EXTRACTION (prototype slice) — /extract with server-held Gemini key, per-user rate limit, usage log
 - [ ] DATA MODEL — 14-table migrations
-- [ ] CUSTODY → EVIDENCE → PROCESSING → EXTRACTION → VALIDATION → REVIEW → REASONING → AUDIT → EXPORT → EVALUATION → DEMO
+- [ ] CUSTODY → EVIDENCE → PROCESSING → VALIDATION → REVIEW → REASONING → AUDIT → EXPORT → EVALUATION → DEMO
