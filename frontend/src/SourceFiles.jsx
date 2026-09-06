@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { api, apiBlob } from './api'
+import { useI18n } from './i18n'
 
 // The complete original file(s) a record was read from. Bytes are fetched as
 // an authenticated blob (the JWT can't ride on <img src> or <iframe src>),
 // rendered inline for images and PDFs.
 export default function SourceFiles({ recordId }) {
+  const { t } = useI18n()
   const [docs, setDocs] = useState(null)
   const [error, setError] = useState(null)
   const [open, setOpen] = useState(false)
@@ -16,15 +18,12 @@ export default function SourceFiles({ recordId }) {
   return (
     <div className="card">
       <h2 style={{ marginBottom: 4 }}>
-        Source documents{' '}
+        {t('source_docs')}{' '}
         {docs && <span className="muted" style={{ fontWeight: 400 }}>({docs.length})</span>}
       </h2>
-      <p className="muted" style={{ marginTop: 0 }}>
-        The complete original file(s) every value was read from — content-addressed (SHA-256), served only
-        through authenticated API. What the AI saw is exactly what you see.
-      </p>
+      <p className="muted" style={{ marginTop: 0 }}>{t('source_docs_sub')}</p>
       {error && <div className="error-box">{error}</div>}
-      {docs && docs.length === 0 && <p className="muted">No source documents recorded for this record.</p>}
+      {docs && docs.length === 0 && <p className="muted">{t('no_source_docs')}</p>}
       {(docs || []).map((d) => (
         <SourceDoc key={d.id} doc={d} expanded={open === d.id} onToggle={() => setOpen(open === d.id ? null : d.id)} />
       ))}
@@ -33,6 +32,7 @@ export default function SourceFiles({ recordId }) {
 }
 
 function SourceDoc({ doc, expanded, onToggle }) {
+  const { t } = useI18n()
   const [url, setUrl] = useState(null)
   const [error, setError] = useState(null)
   const isImage = (doc.mime || '').startsWith('image/')
@@ -59,12 +59,12 @@ function SourceDoc({ doc, expanded, onToggle }) {
           sha256 {doc.sha256.slice(0, 12)}…
         </span>
         <span style={{ flex: 1 }} />
-        <button className="btn btn-sm" onClick={onToggle}>{expanded ? 'Hide' : 'View file'}</button>
+        <button className="btn btn-sm" onClick={onToggle}>{expanded ? t('hide') : t('view_file')}</button>
       </div>
       {expanded && (
         <div style={{ marginTop: 8 }}>
           {error && <div className="error-box">{error}</div>}
-          {!url && !error && <p className="muted">Loading…</p>}
+          {!url && !error && <p className="muted">{t('loading')}</p>}
           {url && isImage && (
             <img src={url} alt={doc.original_filename} style={{ maxWidth: '100%', maxHeight: 520, border: '1px solid rgba(128,128,128,0.4)', borderRadius: 4 }} />
           )}
@@ -78,7 +78,7 @@ function SourceDoc({ doc, expanded, onToggle }) {
           )}
           {url && (
             <p style={{ marginBottom: 0 }}>
-              <a href={url} target="_blank" rel="noreferrer">Open full size in new tab ↗</a>
+              <a href={url} target="_blank" rel="noreferrer">{t('open_full')}</a>
               <span className="muted"> · sha256 {doc.sha256}</span>
             </p>
           )}

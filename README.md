@@ -105,6 +105,17 @@ append-only audit trail around every decision. The stage-by-stage detail:
 
 ## Features
 
+**Multilingual interface (EN / हिन्दी / ગુજરાતી)**
+- One-click language switcher in the sidebar (and on the login page); choice persists per user via
+  localStorage; `<html lang>` updates for accessibility and screen readers
+- English and Hindi are fully translated (≈220 strings — every screen); Gujarati covers the core
+  surfaces with automatic English fallback for the rest (add a key to the `gu` dict in
+  `frontend/src/i18n.jsx` to translate it — no other change needed)
+- Zero dependencies: hand-rolled provider + `useI18n()` hook, `{placeholder}` interpolation,
+  per-language Indic font stack and line-height in CSS
+- Note the distinction: the *interface* is trilingual; the *extraction engine* is script-agnostic
+  (any Indic script in, structured values out — see below)
+
 **AI extraction (12 fields, any Indic script)**
 - Core fields gate workflow routing: `khasra_no`, `owner_name`, `area_raw`, `village`
 - Extended fields captured when the document carries them: `khata_no`, `survey_no`, `tehsil`, `district`,

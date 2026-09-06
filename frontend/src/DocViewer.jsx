@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api, apiBlob } from './api'
+import { useI18n } from './i18n'
 
 // The source scan, pinned top-right of the record page, expandable to
 // fullscreen. Every field the VISION engine read is drawn as a box at the
@@ -7,6 +8,7 @@ import { api, apiBlob } from './api'
 // so it scales with any render size). Text-path records have no pixel
 // locations — the panel says so honestly rather than pretending.
 export default function DocViewer({ fields, activeFieldId, onSelectField }) {
+  const { t } = useI18n()
   const [docs, setDocs] = useState(null)
   const [docId, setDocId] = useState(null)
   const [url, setUrl] = useState(null)
@@ -98,7 +100,7 @@ export default function DocViewer({ fields, activeFieldId, onSelectField }) {
           ))}
         </div>
       )}
-      {doc && !url && <p className="muted">Loading scan…</p>}
+      {doc && !url && <p className="muted">{t('loading_scan')}</p>}
       {url && isImage && (
         <div className="dv-canvas">
           <div className="dv-frame">
@@ -137,15 +139,15 @@ export default function DocViewer({ fields, activeFieldId, onSelectField }) {
       )}
       {doc && (
         <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
-          <span className="mono">{doc.sha256.slice(0, 16)}…</span> · {doc.mime} · {doc.page_count} page(s)
+          <span className="mono">{doc.sha256.slice(0, 16)}…</span> · {doc.mime} · {doc.page_count} {t('pages')}
         </p>
       )}
       <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>
         {located > 0
-          ? <>📍 <b>{located}</b> of {visionFields || boxes.length} read fields located on this scan — click a box or a value to link them.</>
+          ? t('dv_located', { n: located, m: visionFields || boxes.length })
           : visionFields > 0
-            ? 'Fields were read from this document on a text path — pixel locations are recorded when values are read directly from scan pixels (vision extraction).'
-            : 'Highlight boxes appear when fields are read directly from the scan pixels (vision extraction). Every value still links to its evidence via the Evidence button.'}
+            ? t('dv_textpath')
+            : t('dv_no_boxes')}
       </p>
     </>
   )
@@ -153,9 +155,9 @@ export default function DocViewer({ fields, activeFieldId, onSelectField }) {
   return (
     <div className="doc-viewer">
       <div className="row" style={{ marginBottom: 6 }}>
-        <h2 style={{ margin: 0 }}>Source document</h2>
+        <h2 style={{ margin: 0 }}>{t('source_document')}</h2>
         <span className="right row" style={{ gap: 6 }}>
-          <button className="btn btn-sm" onClick={() => setExpanded(true)} disabled={!url}>⤢ Expand</button>
+          <button className="btn btn-sm" onClick={() => setExpanded(true)} disabled={!url}>{t('expand')}</button>
         </span>
       </div>
       {body}
@@ -164,8 +166,7 @@ export default function DocViewer({ fields, activeFieldId, onSelectField }) {
         <div className="dv-fullscreen" onClick={() => setExpanded(false)}>
           <div className="dv-fullscreen-head">
             <b>{doc?.original_filename}</b>
-            <span className="muted" style={{ fontSize: 12 }}>click anywhere or press Esc to close</span>
-            <button className="btn btn-sm right" onClick={() => setExpanded(false)}>Close</button>
+            <button className="btn btn-sm right" onClick={() => setExpanded(false)}>{t('close')}</button>
           </div>
           <div className="dv-canvas" onClick={(e) => e.stopPropagation()}>
             <div className="dv-frame" style={{ width: 'fit-content', margin: '0 auto' }}>

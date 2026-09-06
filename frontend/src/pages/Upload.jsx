@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { api } from '../api'
 import CropImage from '../CropImage'
 import { useAuth } from '../auth'
+import { useI18n } from '../i18n'
 
 export default function UploadPage() {
   const { role } = useAuth()
+  const { t } = useI18n()
   const canWrite = ['operator', 'checker', 'certifier', 'admin'].includes(role)
 
   const [registerRef, setRegisterRef] = useState(`REG-${new Date().toISOString().slice(0, 10)}`)
@@ -21,7 +23,7 @@ export default function UploadPage() {
   const [recordId, setRecordId] = useState(null)
 
   if (!canWrite) {
-    return <><h1>Upload & Extract</h1><div className="error-box">Your role ({role}) cannot upload documents.</div></>
+    return <><h1>{t('upload_title')}</h1><div className="error-box">{t('upload_denied', { role })}</div></>
   }
 
   const run = async (e) => {
@@ -31,35 +33,35 @@ export default function UploadPage() {
     setResult(null)
     setRecordId(null)
     try {
-      setStep('Creating intake manifest…')
+      setStep(t('step_manifest'))
       const m = await api('/intake', {
         method: 'POST',
         body: { register_ref: `${registerRef}-${Date.now()}`, centre: centre || 'UI', device: device || 'UI', expected_count: 1 },
       })
 
-      setStep('Uploading scan…')
+      setStep(t('step_uploading'))
       const fd = new FormData()
       fd.append('manifest_id', String(m.id))
       fd.append('file', file)
       const d = await api('/documents', { method: 'POST', formData: fd })
 
-      setStep('Registering page…')
+      setStep(t('step_registering'))
       const p = await api(`/documents/${d.id}/pages`, { method: 'POST', body: { seq_no: 1, sha256: d.sha256 } })
 
       let ex
       if (visionMode) {
-        setStep('Reading the scan (vision, any Indic script — up to a minute)…')
+        setStep(t('step_vision'))
         const v = await api(`/pages/${p.id}/extract-image`, { method: 'POST' })
         ex = { run: { id: v.run_id, status: v.status }, candidates: [], crops: v.crops || {}, fields: v.fields }
       } else {
-        setStep('Extracting fields (Gemini)…')
+        setStep(t('step_extract'))
         ex = await api(`/documents/${d.id}/extract`, { method: 'POST', body: { text, page_id: p.id } })
       }
 
       setResult({ manifest: m, document: d, page: p, ...ex })
       setStep('')
     } catch (err) {
-      setError(`${step ? step + ' ' : ''}failed: ${err.message}`)
+      setError(`${t('failed', { msg: '' }).replace(/:$/, '')} ${step}: ${err.message}`)
       setStep('')
     } finally {
       setBusy(false)
@@ -81,51 +83,49 @@ export default function UploadPage() {
 
   return (
     <>
-      <h1>Upload & Extract</h1>
-      <p className="sub">Intake → custody → extraction → record. Every step is logged and evidence-bound.</p>
+      <h1>{t('upload_title')}</h1>
+      <p className="sub">{t('upload_sub')}</p>
 
       <form onSubmit={run} className="card">
-        <h2>1 · Intake manifest</h2>
+        <h2>{t('step1_manifest')}</h2>
         <div className="row">
           <div className="field" style={{ flex: 1, minWidth: 180 }}>
-            <label>Register reference</label>
+            <label>{t('register_reference')}</label>
             <input value={registerRef} onChange={(e) => setRegisterRef(e.target.value)} required />
           </div>
           <div className="field" style={{ flex: 1, minWidth: 140 }}>
-            <label>Centre</label>
+            <label>{t('centre')}</label>
             <input value={centre} onChange={(e) => setCentre(e.target.value)} placeholder="e.g. Tehsil Salempr" />
           </div>
           <div className="field" style={{ flex: 1, minWidth: 140 }}>
-            <label>Device</label>
+            <label>{t('device')}</label>
             <input value={device} onChange={(e) => setDevice(e.target.value)} placeholder="e.g. Scanner-01" />
           </div>
         </div>
 
-        <h2>2 · Scan and input mode</h2>
+        <h2>{t('step2_mode')}</h2>
         <div className="field">
-          <label>Page image (PNG/JPEG, single page)</label>          <input type="file" accept="image/png,image/jpeg,application/pdf"
+          <label>{t('page_image')}</label>          <input type="file" accept="image/png,image/jpeg,application/pdf"
                  onChange={(e) => setFile(e.target.files[0] ?? null)} required />
         </div>
         <div className="field">
           <label>
-            <input type="radio" checked={!visionMode} onChange={() => setVisionMode(false)} /> Text mode —
-            paste the register line (fast, uses the typed text)
+            <input type="radio" checked={!visionMode} onChange={() => setVisionMode(false)} /> {t('text_mode')}
           </label>
           <label>
-            <input type="radio" checked={visionMode} onChange={() => setVisionMode(true)} /> Vision mode —
-            read the scan directly (any Indic script; slower, returns evidence crops per field)
+            <input type="radio" checked={visionMode} onChange={() => setVisionMode(true)} /> {t('vision_mode')}
           </label>
         </div>
         {!visionMode && (
           <div className="field">
-            <label>Register line to extract (Devanagari or English)</label>
+            <label>{t('register_line_label')}</label>
             <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
                       placeholder="राम प्रसाद पुत्र श्याम लाल, खसरा २३४, क्षेत्र २-४० बीघा, ग्राम सलेमपुर" required />
           </div>
         )}
 
         <button className="btn btn-primary" disabled={busy || !file || (!visionMode && !text.trim())}>
-          {busy ? (step || 'Working…') : visionMode ? 'Run custody → vision pipeline' : 'Run custody → extraction pipeline'}
+          {busy ? (step || t('working')) : visionMode ? t('run_vision_pipeline') : t('run_text_pipeline')}
         </button>
       </form>
 
@@ -133,30 +133,30 @@ export default function UploadPage() {
 
       {result && (
         <div className="card">
-          <h2>Extraction run #{result.run.id} — <span className={`badge ${result.run.status}`}>{result.run.status}</span></h2>
+          <h2>{t('extraction_run')} #{result.run.id} — <span className={`badge ${result.run.status}`}>{result.run.status}</span></h2>
           <p className="muted">
-            Manifest #{result.manifest.id} → Document #{result.document.id} (sha <span className="mono">{result.document.sha256.slice(0, 16)}…</span>) → Page #{result.page.id}
+            {t('evidence_chain')} #{result.manifest.id} → {t('source_document')} #{result.document.id} (sha <span className="mono">{result.document.sha256.slice(0, 16)}…</span>) → {t('page')} #{result.page.id}
           </p>
           <div className="detail-grid">
             {result.candidates.length > 0
               ? result.candidates.map((c) => (
                 <div key={c.id} className="value-card">
                   <div className="fv-label">{c.field_type.replace(/_/g, ' ')}</div>
-                  <div className={`fv-value${c.is_unknown ? ' unknown' : ''}`}>{c.value ?? 'UNKNOWN'}</div>
-                  <div className="muted mono">raw: {c.raw_value ?? '—'}{c.confidence != null ? ` · conf ${c.confidence}` : ''}</div>
+                  <div className={`fv-value${c.is_unknown ? ' unknown' : ''}`}>{c.value ?? t('unknown')}</div>
+                  <div className="muted mono">{t('raw')} {c.raw_value ?? '—'}{c.confidence != null ? ` · ${t('col_confidence').toLowerCase()} ${c.confidence}` : ''}</div>
                 </div>
               ))
               : Object.entries(result.fields || {}).map(([k, v]) => (
                 <div key={k} className="value-card">
                   <div className="fv-label">{k.replace(/_/g, ' ')}</div>
-                  <div className={`fv-value${v == null ? ' unknown' : ''}`}>{v ?? 'UNKNOWN'}</div>
+                  <div className={`fv-value${v == null ? ' unknown' : ''}`}>{v ?? t('unknown')}</div>
                   {result.crops?.[k] != null && <CropImage cropId={result.crops[k]} maxWidth={220} />}
                 </div>
               ))}
           </div>
           {recordId
-            ? <div className="ok-box">Record created — <Link to={`/records/${recordId}`}>open record #{recordId} →</Link></div>
-            : <button className="btn btn-primary mt" onClick={project} disabled={busy}>Create land record from this run →</button>}
+            ? <div className="ok-box">{t('record_created')} <Link to={`/records/${recordId}`}>{t('open_record', { id: recordId })}</Link></div>
+            : <button className="btn btn-primary mt" onClick={project} disabled={busy}>{t('create_from_run')}</button>}
         </div>
       )}
     </>

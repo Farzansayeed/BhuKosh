@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api, apiBlob } from './api'
+import { useI18n } from './i18n'
 
 // Document integrity (PS #10 duplicate detection + forged-scan review):
 //  - perceptual duplicate check (phash Hamming, instant, no engine cost)
@@ -7,6 +8,7 @@ import { api, apiBlob } from './api'
 //  - identifier library grown from VERIFIED documents ("AI learns the stamps")
 // Findings are decision support: a human declares a document forged.
 export default function IntegrityPanel({ recordId, onDone }) {
+  const { t } = useI18n()
   const [docs, setDocs] = useState(null)
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState({})
@@ -42,7 +44,7 @@ export default function IntegrityPanel({ recordId, onDone }) {
       const r = await api(`/integrity/learn/${pageId}`, {
         method: 'POST', body: { identifiers: identifiers.map((i) => ({ kind: i.kind, label: i.label })) },
       })
-      setLearned(`Learned ${r.learned} identifier(s) — library now holds ${r.library_size}.`)
+      setLearned(t('learned_n', { n: r.learned, m: r.library_size }))
     } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
 
@@ -50,11 +52,8 @@ export default function IntegrityPanel({ recordId, onDone }) {
 
   return (
     <div className="card">
-      <h2>Document integrity — duplicates & forgery review</h2>
-      <p className="muted" style={{ marginTop: 0 }}>
-        Perceptual check catches re-scans/re-uploads instantly; the vision pass reads stamps, seals and
-        alteration signals. It advises — only a human can declare a document forged.
-      </p>
+      <h2>{t('integrity_title')}</h2>
+      <p className="muted" style={{ marginTop: 0 }}>{t('integrity_sub')}</p>
       {err && <div className="error-box">{err}</div>}
       {learned && <div className="ok-box">{learned}</div>}
 
@@ -66,18 +65,18 @@ export default function IntegrityPanel({ recordId, onDone }) {
               <b>{d.original_filename}</b>
               <span className="muted mono" style={{ fontSize: 11 }}>{d.sha256?.slice(0, 16)}…</span>
               <span className="right" />
-              <button className="btn btn-sm" disabled={busy} onClick={() => runCheck(d.id)}>Check duplicates</button>
+              <button className="btn btn-sm" disabled={busy} onClick={() => runCheck(d.id)}>{t('check_duplicates')}</button>
               <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => runVision(d.id)}>
-                Vision forensics (AI)
+                {t('vision_forensics')}
               </button>
             </div>
 
             {res?.kind === 'check' && (
               <p style={{ margin: '8px 0 0' }}>
                 {sevChip(res.duplicate_findings.length ? 'warn' : 'ok')}{' '}
-                {res.pages_checked} page(s) compared against the corpus —{' '}
+                {t('pages_compared', { n: res.pages_checked })}{' '}
                 {res.duplicate_findings.length === 0
-                  ? 'no near-duplicates found.'
+                  ? t('no_near_dups')
                   : res.duplicate_findings.map((f, i) => <div key={i} className="mini-row">⚠ {f.detail}</div>)}
               </p>
             )}
@@ -99,14 +98,14 @@ export default function IntegrityPanel({ recordId, onDone }) {
                 )}
                 {p.identifiers?.length > 0 && (
                   <>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>Identifiers seen:</div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{t('identifiers_seen')}</div>
                     {p.identifiers.map((idn, i) => (
                       <span key={i} className="chip" style={{ marginRight: 6 }}>{idn.kind}: {idn.label}</span>
                     ))}
                     <button className="btn btn-sm" style={{ marginLeft: 6 }} disabled={busy}
                       onClick={() => learn(p.page_id ?? d.id, p.page_id ?? d.id, p.identifiers)}
-                      title="Teach the library these stamps/seals from this verified document">
-                      ↺ Learn these identifiers
+                      title={t('learn_tip')}>
+                      {t('learn_identifiers')}
                     </button>
                   </>
                 )}

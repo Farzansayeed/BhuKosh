@@ -2,24 +2,26 @@ import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import ConfidenceChip from '../ConfidenceChip'
+import { useI18n } from '../i18n'
 
 // Records list: server-side search (Postgres trigram index, ILIKE fallback),
 // server-side sorting on whitelisted columns, state filter. Document-level
 // confidence chip = the worst field score (corrected fields excluded).
 const COLUMNS = [
-  { key: 'id', label: 'ID' },
-  { key: 'village', label: 'Village' },
-  { key: 'khasra', label: 'Khasra' },
-  { key: 'state', label: 'State' },
-  { key: 'confidence', label: 'Confidence' },
-  { key: 'version', label: 'Ver' },
-  { key: 'claim', label: 'Claim' },
-  { key: 'updated', label: 'Updated' },
+  { key: 'id', key_id: 'col_id' },
+  { key: 'village', key_id: 'col_village' },
+  { key: 'khasra', key_id: 'col_khasra' },
+  { key: 'state', key_id: 'col_state' },
+  { key: 'confidence', key_id: 'col_confidence' },
+  { key: 'version', key_id: 'col_version' },
+  { key: 'claim', key_id: 'col_claim' },
+  { key: 'updated', key_id: 'col_updated' },
 ]
 
 const STATES = ['', 'INGESTED', 'EXTRACTED', 'VALIDATED', 'REVIEW_REQUIRED', 'VERIFIED', 'OFFICER_CERTIFIED', 'ARCHIVED', 'REJECTED', 'QUARANTINED']
 
 export default function RecordsPage() {
+  const { t } = useI18n()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState(null)
   const [state, setState] = useState('')
@@ -65,37 +67,42 @@ export default function RecordsPage() {
 
   return (
     <div>
-      <h1>Records</h1>
-      <p className="sub">Every land record, with its lifecycle state. Any value → Record view → one click to evidence.</p>
+      <h1>{t('records_title')}</h1>
+      <p className="sub">{t('records_sub')}</p>
 
       <div className="row" style={{ margin: '10px 0 14px', alignItems: 'flex-end' }}>
         <form onSubmit={submitSearch} className="row" style={{ gap: 6, flex: '1 1 260px', maxWidth: 440 }}>
           <div className="field" style={{ marginBottom: 0, flex: 1 }}>
             <input
-              placeholder="Search id, village, khasra, owner, survey…  (live as you type)"
+              placeholder={t('search_placeholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          {searching && <span className="muted" style={{ fontSize: 12 }}>searching…</span>}
+          {searching && <span className="muted" style={{ fontSize: 12 }}>{t('searching')}</span>}
           {search && (
-            <button className="btn btn-sm" type="button" onClick={() => setSearch('')}>Clear</button>
+            <button className="btn btn-sm" type="button" onClick={() => setSearch('')}>{t('clear')}</button>
           )}
         </form>
         <div className="field" style={{ marginBottom: 0 }}>
           <select value={state} onChange={(e) => setState(e.target.value)}>
             {STATES.map((s) => (
-              <option key={s} value={s}>{s === '' ? 'All states' : s.replace('_', ' ')}</option>
+              <option key={s} value={s}>{s === '' ? t('all_states') : s.replace('_', ' ')}</option>
             ))}
           </select>
         </div>
-        <span className="muted">{rows ? `${rows.length} record(s)` : 'loading…'}</span>
+        <span className="muted">{rows ? t('n_records', { n: rows.length }) : t('loading')}</span>
       </div>
 
       {error && <div className="error-box">{error}</div>}
 
       {rows && rows.length === 0 && (
-        <div className="card muted">No records{state ? ` in ${state}` : ''}{search ? ` matching “${search}”` : ''}. Upload a register page to create the first one.</div>
+        <div className="card muted">
+          {t('no_records', {
+            state: state ? t('no_records_state', { state }) : '',
+            search: search ? t('no_records_search', { search }) : '',
+          })}
+        </div>
       )}
 
       {rows && rows.length > 0 && (
@@ -106,14 +113,14 @@ export default function RecordsPage() {
                 {COLUMNS.map((c) => (
                   <th key={c.key}>
                     {c.key === 'confidence' || c.key === 'claim' ? (
-                      c.label
+                      t(c.key_id)
                     ) : (
                       <button
                         onClick={() => flip(c.key)}
                         style={{ all: 'unset', cursor: 'pointer', font: 'inherit', color: 'inherit' }}
-                        title="Sort"
+                        title={t('sort')}
                       >
-                        {c.label}{sort.by === c.key ? (sort.order === 'asc' ? ' ↑' : ' ↓') : ''}
+                        {t(c.key_id)}{sort.by === c.key ? (sort.order === 'asc' ? ' ↑' : ' ↓') : ''}
                       </button>
                     )}
                   </th>

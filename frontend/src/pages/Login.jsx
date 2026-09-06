@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { LANGS, useI18n } from '../i18n'
 
 export default function LoginPage() {
   const { login } = useAuth()
+  const { t, lang, setLang } = useI18n()
   const nav = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -27,19 +29,24 @@ export default function LoginPage() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
       <form onSubmit={submit} className="card" style={{ width: 360 }}>
-        <div className="brand" style={{ padding: 0 }}>Bhu<span>Kosh</span></div>
-        <p className="sub">Land records, with evidence.</p>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="brand" style={{ padding: 0 }}>Bhu<span>Kosh</span></div>
+          <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t('language')} style={{ fontSize: 12 }}>
+            {LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+        </div>
+        <p className="sub">{t('login_tagline')}</p>
         <div className="field">
-          <label>Username</label>
+          <label>{t('username')}</label>
           <input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
         </div>
         <div className="field">
-          <label>Password</label>
+          <label>{t('password')}</label>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         {error && <div className="error-box">{error}</div>}
         <button className="btn btn-primary" style={{ width: '100%' }} disabled={busy || !username || !password}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t('signing_in') : t('sign_in')}
         </button>
       </form>
     </div>

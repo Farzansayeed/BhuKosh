@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
 import { useAuth } from '../auth'
+import { useI18n } from '../i18n'
 
 export default function AuditPage() {
   const { role } = useAuth()
+  const { t } = useI18n()
   const [events, setEvents] = useState(null)
   const [head, setHead] = useState(null)
   const [verifyRes, setVerifyRes] = useState(null)
@@ -19,7 +21,7 @@ export default function AuditPage() {
   useEffect(() => { if (isAuditor) load() }, [isAuditor])
 
   if (!isAuditor) {
-    return <><h1>Audit Chain</h1><div className="error-box">Audit access is admin/auditor only (your role: {role}).</div></>
+    return <><h1>{t('audit_title')}</h1><div className="error-box">{t('audit_denied', { role })}</div></>
   }
 
   const verify = async () => {
@@ -30,27 +32,27 @@ export default function AuditPage() {
 
   return (
     <>
-      <h1>Audit Chain</h1>
-      <p className="sub">Hash-linked, append-only. Every decision commits an event in the same transaction — tampering breaks the chain and is detectable.</p>
+      <h1>{t('audit_title')}</h1>
+      <p className="sub">{t('audit_sub')}</p>
 
       <div className="row" style={{ marginBottom: 14 }}>
         <button className="btn btn-primary" onClick={verify} disabled={busy}>
-          {busy ? 'Verifying full chain…' : 'Verify full chain'}
+          {busy ? t('verifying_chain') : t('verify_full_chain')}
         </button>
-        {head && <span className="muted">head: seq <b>{head.seq}</b> · <span className="mono">{String(head.payload_hash).slice(0, 20)}…</span></span>}
+        {head && <span className="muted">{t('head')}: <b>{head.seq}</b> · <span className="mono">{String(head.payload_hash).slice(0, 20)}…</span></span>}
       </div>
 
       {verifyRes && (
         verifyRes.valid
-          ? <div className="ok-box">Chain VALID — {verifyRes.length} events verified, no forks, no broken links, no altered payloads.</div>
-          : <div className="error-box">Chain INVALID at seq {verifyRes.first_invalid_seq}: {verifyRes.reason}</div>
+          ? <div className="ok-box">{t('chain_valid', { n: verifyRes.length })}</div>
+          : <div className="error-box">{t('chain_invalid', { seq: verifyRes.first_invalid_seq, reason: verifyRes.reason })}</div>
       )}
       {error && <div className="error-box">{error}</div>}
 
       <div className="card" style={{ padding: 0 }}>
         <table>
           <thead>
-            <tr><th>Seq</th><th>Action</th><th>Actor</th><th>Refs</th><th>Hash</th><th>At</th></tr>
+            <tr><th>{t('col_seq')}</th><th>{t('col_action')}</th><th>{t('col_actor')}</th><th>{t('col_refs')}</th><th>{t('col_hash')}</th><th>{t('col_at')}</th></tr>
           </thead>
           <tbody>
             {(events || []).map((ev) => (
@@ -65,7 +67,7 @@ export default function AuditPage() {
                 <td className="muted">{new Date(ev.created_at).toLocaleString()}</td>
               </tr>
             ))}
-            {events && events.length === 0 && <tr><td colSpan={6} className="muted">No events yet.</td></tr>}
+            {events && events.length === 0 && <tr><td colSpan={6} className="muted">{t('no_events')}</td></tr>}
           </tbody>
         </table>
       </div>

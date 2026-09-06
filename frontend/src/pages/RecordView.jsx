@@ -8,12 +8,14 @@ import DocViewer from '../DocViewer'
 import HistoryPanel from '../HistoryPanel'
 import IntegrityPanel from '../IntegrityPanel'
 import { useAuth } from '../auth'
+import { useI18n } from '../i18n'
 
 // Anomaly explanations arrive as structured JSON from the rules engine.
 // Render them as plain language: a summary sentence, labeled evidence with
 // links, and the raw JSON only as a collapsible last resort. Older anomalies
 // (numeric evidence arrays) still fall back to raw JSON.
 function AnomalyExplanation({ anomaly }) {
+  const { t } = useI18n()
   const ex = anomaly.explanation || {}
   const ev = Array.isArray(ex.evidence) ? ex.evidence : []
   const labeled = ev.length > 0 && typeof ev[0] === 'object'
@@ -28,11 +30,11 @@ function AnomalyExplanation({ anomaly }) {
             <li key={i}>
               {e.record_id != null
                 ? <Link to={`/records/${e.record_id}`}>record #{e.record_id}</Link>
-                : 'this record'}
+                : t('this_record')}
               {' — '}
               <span className="mono">{e.field}</span>
               {': '}
-              {e.value != null ? <b>{String(e.value)}</b> : <i>no value read</i>}
+              {e.value != null ? <b>{String(e.value)}</b> : <i>{t('no_value_read')}</i>}
               {e.role ? ` (${e.role})` : ''}
             </li>
           ))}
@@ -47,7 +49,7 @@ function AnomalyExplanation({ anomaly }) {
         <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>→ {ex.recommended_action}</p>
       )}
       <details style={{ marginTop: 4, fontSize: 12 }}>
-        <summary className="muted">technical detail</summary>
+        <summary className="muted">{t('technical_detail')}</summary>
         <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{JSON.stringify(ex, null, 2)}</pre>
       </details>
     </div>
@@ -65,6 +67,7 @@ function humanDetail(d) {
 // every checkable signal — rules, cross-record corroboration, integrity, human
 // authority — with the external registry honestly shown as an adapter slot.
 function VerifyPanel({ recordId }) {
+  const { t } = useI18n()
   const [v, setV] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -77,18 +80,15 @@ function VerifyPanel({ recordId }) {
   const bandClass = v?.verdict === 'SUFFICIENT' ? 'conf-high' : v?.verdict === 'PARTIAL' ? 'conf-medium' : 'conf-low'
   return (
     <div className="card">
-      <h2>Truth assurance</h2>
-      <p className="muted" style={{ marginTop: 0 }}>
-        Not "how well did we read it" but "why should you believe it is correct" — every independently
-        checkable signal, cross-checked against the database. The AI's opinion is one input, never the verdict.
-      </p>
-      {!v && !error && <button className="btn" onClick={run} disabled={busy}>{busy ? 'Checking…' : 'Check assurance'}</button>}
-      {error && <><div className="error-box">{error}</div><button className="btn" onClick={run}>Retry</button></>}
+      <h2>{t('truth_assurance')}</h2>
+      <p className="muted" style={{ marginTop: 0 }}>{t('assurance_intro')}</p>
+      {!v && !error && <button className="btn" onClick={run} disabled={busy}>{busy ? t('checking') : t('check_assurance')}</button>}
+      {error && <><div className="error-box">{error}</div><button className="btn" onClick={run}>{t('retry')}</button></>}
       {v && (
         <>
           <p style={{ margin: '6px 0' }}>
             <span className={`chip ${bandClass}`} style={{ fontSize: 14 }}>{v.verdict}</span>
-            {'  '}<b>{v.assurance}%</b> <span className="muted">over checkable signals</span>
+            {'  '}<b>{v.assurance}%</b> <span className="muted">{t('over_checkable')}</span>
           </p>
           <p className="muted" style={{ marginTop: 2 }}>{v.verdict_meaning}</p>
           <table style={{ marginTop: 8 }}>
@@ -102,7 +102,7 @@ function VerifyPanel({ recordId }) {
               ))}
             </tbody>
           </table>
-          <button className="btn btn-sm mt" onClick={run} disabled={busy}>Re-check</button>
+          <button className="btn btn-sm mt" onClick={run} disabled={busy}>{t('recheck')}</button>
         </>
       )}
     </div>
@@ -110,6 +110,7 @@ function VerifyPanel({ recordId }) {
 }
 
 function EvidenceDialog({ fieldId, onClose }) {
+  const { t } = useI18n()
   const [chain, setChain] = useState(null)
   const [error, setError] = useState(null)
 
@@ -123,15 +124,15 @@ function EvidenceDialog({ fieldId, onClose }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
     }}>
       <div className="card" onClick={(e) => e.stopPropagation()} style={{ width: 560, maxHeight: '80vh', overflow: 'auto' }}>
-        <div className="row"><h2 style={{ margin: 0 }}>Evidence chain</h2><button className="btn btn-sm right" onClick={onClose}>Close</button></div>
+        <div className="row"><h2 style={{ margin: 0 }}>{t('evidence_chain')}</h2><button className="btn btn-sm right" onClick={onClose}>{t('close')}</button></div>
         {error && <div className="error-box">{error}</div>}
-        {!chain && !error && <p className="muted">Loading…</p>}
+        {!chain && !error && <p className="muted">{t('loading')}</p>}
         {chain && (
           <>
             <h2>Field</h2>
             <dl className="kv">
-              <dt>Value shown</dt><dd>{chain.field.current_value ?? <i>UNKNOWN</i>}</dd>
-              <dt>Raw (engine)</dt><dd className="mono">{chain.field.raw_value ?? '—'}</dd>
+              <dt>{t('value_shown')}</dt><dd>{chain.field.current_value ?? <i>{t('unknown')}</i>}</dd>
+              <dt>{t('raw_engine')}</dt><dd className="mono">{chain.field.raw_value ?? '—'}</dd>
               <dt>State</dt><dd><span className={`badge ${chain.field.state}`}>{chain.field.state}</span></dd>
             </dl>
             <h2>Candidate</h2>
@@ -143,14 +144,14 @@ function EvidenceDialog({ fieldId, onClose }) {
             </dl>
             {chain.candidate.crop_id && (
               <>
-                <h2>Evidence crop — the exact pixels this value was read from</h2>
+                <h2>{t('evidence_crop')}</h2>
                 <CropImage cropId={chain.candidate.crop_id} />
                 <p className="muted mono" style={{ fontSize: 12 }}>
                   bbox (px): [{(chain.candidate.crop_bbox || []).join(', ')}]
                 </p>
               </>
             )}
-            <h2>Extraction run</h2>
+            <h2>{t('extraction_run')}</h2>
             <dl className="kv">
               <dt>Run</dt><dd>#{chain.run.id} ({chain.run.kind}, {chain.run.status})</dd>
               <dt>Engine</dt><dd>{chain.run.engine_name} {chain.run.engine_version ?? ''}</dd>
@@ -158,14 +159,14 @@ function EvidenceDialog({ fieldId, onClose }) {
               <dt>Input hash</dt><dd className="mono">{chain.run.input_hash}</dd>
               <dt>Raw output</dt><dd className="mono" style={{ wordBreak: 'break-all' }}>{chain.run.raw_output_uri}</dd>
             </dl>
-            <h2>Document & page</h2>
+            <h2>{t('document_page')}</h2>
             <dl className="kv">
-              <dt>Filename</dt><dd>{chain.document?.original_filename ?? '—'}</dd>
+              <dt>{t('filename')}</dt><dd>{chain.document?.original_filename ?? '—'}</dd>
               <dt>SHA-256</dt><dd className="mono">{chain.document?.sha256 ?? '—'}</dd>
-              <dt>Page</dt><dd>seq {chain.page?.seq_no} (#{chain.page?.id})</dd>
+              <dt>Page</dt><dd>{t('seq')} {chain.page?.seq_no} (#{chain.page?.id})</dd>
               <dt>Content</dt>
               <dd>
-                {chain.document && <a href={`/api${chain.document.content_uri}`} target="_blank" rel="noreferrer">open source scan ↗</a>}
+                {chain.document && <a href={`/api${chain.document.content_uri}`} target="_blank" rel="noreferrer">{t('open_source_scan')}</a>}
               </dd>
             </dl>
           </>
@@ -177,6 +178,7 @@ function EvidenceDialog({ fieldId, onClose }) {
 
 function StateActions({ record, onDone }) {
   const { role } = useAuth()
+  const { t } = useI18n()
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -221,36 +223,36 @@ function StateActions({ record, onDone }) {
 
   return (
     <div className="card">
-      <h2>Actions</h2>
-      {!decideRoles && <p className="muted">Your role ({role}) is read-only on decisions.</p>}
+      <h2>{t('actions')}</h2>
+      {!decideRoles && <p className="muted">{t('readonly_role', { role })}</p>}
       {decideRoles && (
         <>
           <div className="field">
-            <label>Reason (mandatory for REJECT, REOPEN, corrections, anomaly resolution)</label>
+            <label>{t('reason_label')}</label>
             <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
           </div>
           <div className="row">
-            <button className="btn btn-sm" onClick={claim} disabled={busy}>Claim (15 min)</button>
-            <button className="btn btn-sm" onClick={release} disabled={busy}>Release</button>
+            <button className="btn btn-sm" onClick={claim} disabled={busy}>{t('claim_btn')}</button>
+            <button className="btn btn-sm" onClick={release} disabled={busy}>{t('release_btn')}</button>
             {state === 'REVIEW_REQUIRED' && (
-              <button className="btn btn-ok" onClick={() => act('APPROVE')} disabled={busy}>Approve → Verified</button>
+              <button className="btn btn-ok" onClick={() => act('APPROVE')} disabled={busy}>{t('approve_verified')}</button>
             )}
             {['EXTRACTED', 'VALIDATED', 'REVIEW_REQUIRED'].includes(state) && (
-              <button className="btn btn-danger" onClick={() => act('REJECT')} disabled={busy || !reason}>Reject</button>
+              <button className="btn btn-danger" onClick={() => act('REJECT')} disabled={busy || !reason}>{t('reject')}</button>
             )}
             {state === 'VERIFIED' && certifyRoles && (
-              <button className="btn btn-primary" onClick={() => act('CERTIFY')} disabled={busy}>Certify</button>
+              <button className="btn btn-primary" onClick={() => act('CERTIFY')} disabled={busy}>{t('certify')}</button>
             )}
             {['VERIFIED', 'OFFICER_CERTIFIED', 'REJECTED'].includes(state) && (
               isAdmin ? (
-                <button className="btn" onClick={() => act('REOPEN')} disabled={busy || !reason}>Reopen (admin)</button>
+                <button className="btn" onClick={() => act('REOPEN')} disabled={busy || !reason}>{t('reopen_admin')}</button>
               ) : (
-                canReopen && <button className="btn" onClick={() => act('REOPEN')} disabled={busy || !reason}>Reopen</button>
+                canReopen && <button className="btn" onClick={() => act('REOPEN')} disabled={busy || !reason}>{t('reopen')}</button>
               )
             )}
             {finalized && !isAdmin && (
               <p className="muted" style={{ margin: '6px 0 0', fontSize: 12 }}>
-                Reopening a {state.toLowerCase().replace('_', ' ')} record requires an admin.
+                {t('reopen_needs_admin', { state: state.toLowerCase().replace('_', ' ') })}
               </p>
             )}
           </div>
@@ -263,6 +265,7 @@ function StateActions({ record, onDone }) {
 
 function FieldEditor({ field, record, onDone }) {
   const { role } = useAuth()
+  const { t } = useI18n()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
@@ -293,21 +296,22 @@ function FieldEditor({ field, record, onDone }) {
   }
 
   if (!editing) {
-    return <button className="btn btn-sm" onClick={() => { setValue(field.current_value ?? ''); setEditing(true) }} disabled={!canCorrect}>Correct</button>
+    return <button className="btn btn-sm" onClick={() => { setValue(field.current_value ?? ''); setEditing(true) }} disabled={!canCorrect}>{t('correct')}</button>
   }
   return (
     <div style={{ minWidth: 200 }}>
       <input value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
       {error && <div className="error-box" style={{ padding: 6 }}>{error}</div>}
       <div className="row mt" style={{ gap: 6 }}>
-        <button className="btn btn-sm btn-primary" onClick={submit} disabled={busy || !value.trim()}>Save</button>
-        <button className="btn btn-sm" onClick={() => setEditing(false)} disabled={busy}>Cancel</button>
+        <button className="btn btn-sm btn-primary" onClick={submit} disabled={busy || !value.trim()}>{t('save')}</button>
+        <button className="btn btn-sm" onClick={() => setEditing(false)} disabled={busy}>{t('cancel')}</button>
       </div>
     </div>
   )
 }
 
 export default function RecordViewPage() {
+  const { t } = useI18n()
   const { id } = useParams()
   const [bundle, setBundle] = useState(null)
   const [validation, setValidation] = useState(null)
@@ -325,7 +329,7 @@ export default function RecordViewPage() {
   useEffect(() => { load() }, [load])
 
   if (error) return <><h1>Record #{id}</h1><div className="error-box">{error}</div></>
-  if (!bundle) return <p className="muted">Loading…</p>
+  if (!bundle) return <p className="muted">{t('loading')}</p>
 
   const { record, fields, decisions, confidence } = bundle
   const canValidate = ['operator', 'checker', 'certifier', 'admin'].includes(role)
@@ -383,7 +387,7 @@ export default function RecordViewPage() {
 
       <div className="record-cols">
         <div className="record-main">
-          <h2>Fields — every value one click from its evidence</h2>
+          <h2>{t('fields_heading')}</h2>
           <div className="detail-grid">
             {fields.map((f) => (
               <div
@@ -394,10 +398,10 @@ export default function RecordViewPage() {
               >
                 <div className="fv-label">{f.field_type.replace(/_/g, ' ')} <span className={`badge ${f.state}`} style={{ float: 'right' }}>{f.state}</span></div>
                 <div className={`fv-value${f.current_value == null ? ' unknown' : ''}`}>
-                  {f.current_value ?? 'UNKNOWN'}
+                  {f.current_value ?? t('unknown')}
                 </div>
                 <div className="row" style={{ gap: 6 }}>
-                  <button className="btn btn-sm" onClick={() => setEvidenceFor(f.id)}>Evidence</button>
+                  <button className="btn btn-sm" onClick={() => setEvidenceFor(f.id)}>{t('evidence')}</button>
                   <FieldEditor field={f} record={record} onDone={load} />
                 </div>
               </div>
@@ -416,14 +420,14 @@ export default function RecordViewPage() {
       <StateActions record={record} onDone={load} />
 
       <div className="card">
-        <h2>Validation</h2>
+        <h2>{t('validation')}</h2>
         <div className="row">
           <button className="btn" onClick={runValidation} disabled={busy || !canValidate}>
-            {canValidate ? 'Run validation' : 'Run validation (state not editable)'}
+            {canValidate ? t('run_validation') : t('run_validation_locked')}
           </button>
           {canExport && <>
-            <button className="btn" onClick={() => createExport('json')} disabled={busy}>Export JSON</button>
-            <button className="btn" onClick={() => createExport('csv')} disabled={busy}>Export CSV</button>
+            <button className="btn" onClick={() => createExport('json')} disabled={busy}>{t('export_json')}</button>
+            <button className="btn" onClick={() => createExport('csv')} disabled={busy}>{t('export_csv')}</button>
           </>}
         </div>
         {validation && (
@@ -440,12 +444,12 @@ export default function RecordViewPage() {
                     <td className="mono muted" style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{humanDetail(r.detail)}</td>
                   </tr>
                 ))}
-                {validation.results.length === 0 && <tr><td colSpan={5} className="muted">No results yet — run validation.</td></tr>}
+                {validation.results.length === 0 && <tr><td colSpan={5} className="muted">{t('no_results_yet')}</td></tr>}
               </tbody>
             </table>
             {validation.anomalies.length > 0 && (
               <>
-                <h2>Anomalies</h2>
+                <h2>{t('anomalies')}</h2>
                 <table>
                   <thead><tr><th>Rule</th><th>Severity</th><th>Status</th><th>Explanation</th></tr></thead>
                   <tbody>
@@ -461,7 +465,7 @@ export default function RecordViewPage() {
                 </table>
               </>
             )}
-            {openAnomalies.length > 0 && <p className="muted mt">Open anomalies hold this record at REVIEW_REQUIRED — resolve them via decisions (reason required).</p>}
+            {openAnomalies.length > 0 && <p className="muted mt">{t('open_anomalies_note')}</p>}
           </>
         )}
       </div>
@@ -475,8 +479,8 @@ export default function RecordViewPage() {
       <HistoryPanel recordId={record.id} />
 
       <div className="card">
-        <h2>Decision trail ({decisions.length})</h2>
-        {decisions.length === 0 && <p className="muted">No human decisions yet.</p>}
+        <h2>{t('decision_trail', { n: decisions.length })}</h2>
+        {decisions.length === 0 && <p className="muted">{t('no_decisions')}</p>}
         {decisions.length > 0 && (
           <table>
             <thead><tr><th>#</th><th>Type</th><th>Actor</th><th>Role</th><th>Reason</th><th>Ver</th><th>At</th></tr></thead>

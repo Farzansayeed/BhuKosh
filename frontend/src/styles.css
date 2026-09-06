@@ -15,11 +15,16 @@
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Segoe UI', 'Noto Sans', 'Noto Sans Devanagari', 'Noto Sans Gujarati',
+    'Mangal', 'Shruti', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
 }
+
+/* multilingual UI: Indic scripts get slightly more line-height for matras */
+html[lang='hi'], html[lang='gu'] { line-height: 1.55; }
+.lang-pick select { width: 100%; font-size: 12px; padding: 5px 8px; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 

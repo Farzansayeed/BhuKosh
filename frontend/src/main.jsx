@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { AuthProvider } from './auth'
+import { I18nProvider } from './i18n'
 import { RequireAuth, Layout } from './Layout'
 import LoginPage from './pages/Login'
 import RecordsPage from './pages/Records'
@@ -30,7 +31,9 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <I18nProvider>
+        <RouterProvider router={router} />
+      </I18nProvider>
     </AuthProvider>
   </React.StrictMode>,
 )
