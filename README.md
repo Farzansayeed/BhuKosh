@@ -39,9 +39,49 @@ care about: **can you trust it, and can you prove it?**
 
 ## How it works — the pipeline
 
+```mermaid
+flowchart TD
+    SCAN["📄 SOURCE — scanned registers<br/>handwritten · any Indic script · images & PDFs"]
+    MANIFEST["📝 EVIDENCE — signed intake manifest<br/>register ref · centre · device<br/>hash-of-hashes verification"]
+    STORE[("🗄️ Content-addressed storage<br/>documents + pages keyed by SHA-256<br/>byte-identical re-upload → 409")]
+    LAYOUT["🔍 LAYOUT — the vision engine reads the scan<br/>per field: value · bounding box · confidence 0–1"]
+    CROPS["✂️ Evidence crops<br/>the exact pixels per field,<br/>content-addressed"]
+    EXTRACT["🤖 EXTRACTION — 12 fields, schema-locked JSON<br/>raw engine output preserved verbatim<br/>every run logs engine · model · prompt version · input hash"]
+    RULES{"⚖️ REASONING — 5 versioned rules<br/>pattern · area format · missing identity<br/>unknown field · cross-record area jump"}
+    VALIDATED["VALIDATED"]
+    REVIEW["REVIEW_REQUIRED<br/>anomaly with a plain-language<br/>explanation + linked evidence"]
+    HUMAN["👤 VERIFICATION — humans decide<br/>claim · correct · approve · reject<br/>reopen · certify — every step audited,<br/>versioned, reason-tracked"]
+    VERIFIED["VERIFIED"]
+    CERTIFIED["OFFICER_CERTIFIED"]
+    OUTPUT["📦 TRUSTED OUTPUT<br/>immutable JSON/CSV exports + evidence manifests<br/>dashboards · OpenAPI for LRMS / DILRMP / GIS"]
+    AUDIT[("🔗 PROVENANCE — hash-chained audit log<br/>trigger-enforced append-only<br/>verified on demand at /audit/verify")]
+
+    SCAN --> MANIFEST --> STORE --> LAYOUT
+    LAYOUT --> CROPS
+    LAYOUT --> EXTRACT
+    EXTRACT --> RULES
+    RULES -->|"clean"| VALIDATED
+    RULES -->|"anomaly"| REVIEW
+    EXTRACT -->|"confidence below 0.6, or unreadable field"| REVIEW
+    VALIDATED --> HUMAN
+    REVIEW --> HUMAN
+    HUMAN --> VERIFIED --> CERTIFIED --> OUTPUT
+    HUMAN -.->|"reject → reopen"| REVIEW
+    CROPS -.->|"judge sees the pixels"| HUMAN
+    HUMAN -.->|"corrections become few-shot hints (learning loop)"| EXTRACT
+    HUMAN -.-> AUDIT
+    RULES -.-> AUDIT
+    OUTPUT -.-> AUDIT
+
+    classDef state fill:#1d4ed8,color:#fff,font-weight:bold;
+    classDef store fill:#065f46,color:#fff;
+    class VALIDATED,REVIEW,VERIFIED,CERTIFIED state
+    class STORE,AUDIT store
 ```
-SOURCE → EVIDENCE → LAYOUT → EXTRACTION → REASONING → VERIFICATION → PROVENANCE → TRUSTED OUTPUT
-```
+
+Solid arrows are the happy path; dotted arrows are the guarantees that make it
+trustworthy — evidence for the reviewer, feedback for the engine, and an
+append-only audit trail around every decision. The stage-by-stage detail:
 
 | Stage | What actually happens | Where it lives |
 |---|---|---|
