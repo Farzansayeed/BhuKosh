@@ -297,7 +297,9 @@ def test_vision_extract_lifecycle(tokens, monkeypatch):
     run = detail["run"]
     assert run["status"] == "SUCCEEDED"
     assert run["engine_name"] == "gemini-vision"
-    assert run["prompt_version"] == "2"
+    from app.processing.router import PROMPT_VERSION
+
+    assert run["prompt_version"] == PROMPT_VERSION  # ledger moves; run must match shipped prompt
     assert run["document_id"] == combo["document"]["id"]
     assert run["page_id"] == page_id
     # input hash = sha256 of the exact stored page bytes

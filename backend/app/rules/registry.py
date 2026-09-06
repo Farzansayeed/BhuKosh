@@ -16,7 +16,7 @@ import re
 
 from .primitives import khasra_pattern_ok, normalize_digits, parse_area_bigha
 
-REGISTRY_VERSION = "1"
+REGISTRY_VERSION = "2"
 
 POST_VALIDATION_STATES = ("VALIDATED", "REVIEW_REQUIRED", "VERIFIED", "OFFICER_CERTIFIED")
 
@@ -67,10 +67,16 @@ def r_village_missing(rec: dict, fields: list[dict], others: list[dict]) -> list
     return [_fail(f["id"] if f else None, "info", {"village": v or None, "note": "village identity absent"})]
 
 
+# Only core fields gate the workflow (PS #9 extended fields are captured when
+# present and never block): khata/tehsil/district etc. are often absent from
+# legacy registers — their absence is a fact, not an extraction failure.
+CORE_WORKFLOW_FIELDS = ("khasra_no", "owner_name", "area_raw", "village")
+
+
 def r_unknown_field(rec: dict, fields: list[dict], others: list[dict]) -> list[dict]:
     findings = []
     for f in fields:
-        if f["current_value"] is None:
+        if f["current_value"] is None and f["field_type"] in CORE_WORKFLOW_FIELDS:
             findings.append(
                 _fail(
                     f["id"], "error",
@@ -85,7 +91,10 @@ def r_unknown_field(rec: dict, fields: list[dict], others: list[dict]) -> list[d
                 )
             )
     if not findings:
-        return [_pass(None, {"unknown_fields": 0})]
+        unknown_ext = sum(
+            1 for f in fields if f["current_value"] is None
+        )
+        return [_pass(None, {"unknown_fields": 0, "extended_fields_absent": unknown_ext})]
     return findings
 
 

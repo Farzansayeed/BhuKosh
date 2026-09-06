@@ -1,16 +1,31 @@
-"""Shared extraction target: land-record register fields (prototype scope).
+"""Shared extraction target: land-record fields (PS #9 full field set).
+
+CORE fields drive the workflow (routing, projection identity, validation);
+EXTENDED fields (PS #9: khata, tehsil, district, classification, ownership,
+mutation, registration, survey) are captured when the document carries them
+and never block the record on absence.
 
 Both the /extract prototype route and the evidence-bound processing runs use
 this exact prompt + schema, so results stay comparable across paths.
 """
 
+CORE_FIELDS = ("khasra_no", "owner_name", "area_raw", "village")
+EXTENDED_FIELDS = (
+    "khata_no",
+    "survey_no",
+    "tehsil",
+    "district",
+    "land_classification",
+    "ownership_type",
+    "mutation_ref",
+    "registration_ref",
+)
+ALL_FIELDS = CORE_FIELDS + EXTENDED_FIELDS
+
 KHASRA_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "khasra_no": {"type": "STRING", "nullable": True},
-        "owner_name": {"type": "STRING", "nullable": True},
-        "area_raw": {"type": "STRING", "nullable": True},
-        "village": {"type": "STRING", "nullable": True},
+        name: {"type": "STRING", "nullable": True} for name in ALL_FIELDS
     },
     "required": ["khasra_no", "owner_name", "area_raw"],
 }
@@ -25,7 +40,7 @@ FIELD_CONFIDENCE_SCHEMA = {
             "nullable": True,
             "description": "0.0-1.0 confidence that the extracted value is read correctly",
         }
-        for name in ("khasra_no", "owner_name", "area_raw", "village")
+        for name in ALL_FIELDS
     },
 }
 
@@ -41,7 +56,7 @@ FIELD_BBOXES_SCHEMA = {
             "nullable": True,
             "description": f"[x1, y1, x2, y2] of the '{name}' value, 0..1000 normalized",
         }
-        for name in ("khasra_no", "owner_name", "area_raw", "village")
+        for name in ALL_FIELDS
     },
 }
 
@@ -53,6 +68,14 @@ PROMPT = (
     "- owner_name: the cultivator/owner name (किसान/स्वामी/खातेदार का नाम)\n"
     "- area_raw: the land area exactly as printed (रकबा/क्षेत्रफल, e.g. '२-४० bigha')\n"
     "- village: the village name (गाँव/मौजा)\n"
+    "- khata_no: the khata/khewat account number (खाता नंबर)\n"
+    "- survey_no: the survey number when distinct from khasra (सर्वे नंबर)\n"
+    "- tehsil: the tehsil/mandal/block (तहसील/मंडल)\n"
+    "- district: the district/zilla (जिला)\n"
+    "- land_classification: land use/type (भूमि का प्रकार — कृषि/अकृषि/गैर-कृषि, e.g. 'समतल चिरायत')\n"
+    "- ownership_type: ownership form (स्वत्व — bhumidhar/sirdar/govt/tenant, or as printed)\n"
+    "- mutation_ref: mutation/inheritance entry reference when present (नामांतरण/वंशावली संदर्भ)\n"
+    "- registration_ref: registration/document reference when present (पंजीकरण संदर्भ)\n"
     "The document may be from ANY Indian state and in ANY Indic script "
     "(Devanagari/Hindi, Gujarati, Gurmukhi, etc.) — register lines or printed "
     "government forms (jamabandi, khatauni, VF-6/VF-7/village form entries). "

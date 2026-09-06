@@ -21,6 +21,8 @@ from ..db import conninfo
 from ..errors import Problem
 from ..extract import gemini_client, rate_limit
 from ..extract.schema import (
+    ALL_FIELDS,
+    CORE_FIELDS,
     FIELD_BBOXES_SCHEMA,
     FIELD_CONFIDENCE_SCHEMA,
     KHASRA_SCHEMA,
@@ -31,8 +33,9 @@ from ..extract.schema import (
 router = APIRouter(tags=["processing"])
 
 WRITE_ROLES = ("operator", "checker", "certifier", "admin")
-PROMPT_ID, PROMPT_VERSION = "khasra_register", "3"
-FIELDS = ("khasra_no", "owner_name", "area_raw", "village")
+PROMPT_ID, PROMPT_VERSION = "khasra_register", "4"
+FIELDS = ALL_FIELDS          # extraction captures every field the document carries
+ROUTING_FIELDS = CORE_FIELDS  # workflow routing keys off the core set only
 
 
 class ExtractIn(BaseModel):
@@ -93,9 +96,9 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
         raw = gemini_client.structured_extract_image(
             image_bytes, mime, vision_schema, prompt=f"{PROMPT}\n\n{VISION_ANNOTATE}"
         )
-        fields = {f: raw.get(f) for f in FIELDS}
-        bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS}
-        confs = {f: raw.get(f"{f}_confidence") for f in FIELDS}
+        fields = {f: raw.get(f) for f in FIELDS if raw.get(f) is not None or f in CORE_FIELDS}
+        bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS if raw.get(f) is not None}
+        confs = {f: raw.get(f"{f}_confidence") for f in fields}
 
         # LAYOUT: materialize one evidence crop per non-null bbox (images only —
         # bbox pixel math is undefined for PDFs).
@@ -119,8 +122,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
             "page_no": page["seq_no"],
             "result": {
                 **fields,
-                **{f"{f}_bbox": bboxes[f] for f in FIELDS},
-                **{f"{f}_confidence": confs[f] for f in FIELDS},
+                **{f"{f}_bbox": bboxes[f] for f in fields if f in bboxes},
+                **{f"{f}_confidence": confs[f] for f in fields},
             },
         }
         raw_bytes = json.dumps(raw_doc, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -137,8 +140,7 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
                     (cr["page_id"], cr["bbox"], cr["crop_hash"], cr["storage_uri"]),
                 ).fetchone()
                 stored[f] = row["id"]
-            for f in FIELDS:
-                v = fields[f]
+            for f, v in fields.items():
                 conf = confs[f]
                 conf = conf if isinstance(conf, (int, float)) and 0 <= conf <= 1 else None
                 conn.execute(
@@ -158,7 +160,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
                    VALUES (%s, '/extraction', 'ok', %s, 0, %s)""",
                 (user["username"], s.gemini_model,
                  Jsonb({"run_id": run["id"], "mode": "image-layout",
-                        "candidates": len(FIELDS), "crops": len(stored),
+                        "candidates": sum(1 for v in fields.values() if v is not None),
+                        "crops": len(stored),
                         "min_confidence": min([c for c in confs.values() if c is not None], default=None)})),
             )
             conn.commit()
@@ -247,8 +250,12 @@ def extract_document(
         uri = storage.save_document(raw_bytes, storage.sha256_bytes(raw_bytes))
 
         with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
-            for f in FIELDS:
-                v = raw.get(f)
+            # Core fields are always recorded (absent ⇒ unknown ⇒ review);
+            # extended fields only when the engine actually returned them.
+            text_fields = {
+                f: raw.get(f) for f in FIELDS if raw.get(f) is not None or f in CORE_FIELDS
+            }
+            for f, v in text_fields.items():
                 conn.execute(
                     """INSERT INTO candidates
                          (run_id, field_type, raw_value, value, is_unknown, nbest_rank, engine)
@@ -264,7 +271,7 @@ def extract_document(
                 """INSERT INTO api_usage (username, route, status, model, prompt_chars, result_json)
                    VALUES (%s, '/extraction', 'ok', %s, %s, %s)""",
                 (user["username"], s.gemini_model, len(body.text),
-                 Jsonb({"run_id": run["id"], "candidates": len(FIELDS)})),
+                 Jsonb({"run_id": run["id"], "candidates": len(text_fields)})),
             )
             conn.commit()
     except Exception as e:

@@ -3,6 +3,24 @@ from psycopg.rows import dict_row
 
 from .config import get_settings
 
+# Supabase routes every connection through PgBouncer in transaction-pooling
+# mode, which cannot preserve server-side prepared statements across
+# transactions. psycopg3 auto-prepares any query executed 5+ times on one
+# connection (our per-field candidate inserts cross that threshold), and the
+# pooled server then fails with DuplicatePreparedStatement. The documented fix
+# is to disable auto-prepare for pooled connections. Applied globally so every
+# call site (routers, services, scripts, tests) is covered.
+_psycopg_connect = psycopg.connect
+
+
+def _connect_pooler_safe(*args, **kwargs):
+    conn = _psycopg_connect(*args, **kwargs)
+    conn.prepare_threshold = None
+    return conn
+
+
+psycopg.connect = _connect_pooler_safe
+
 
 def conninfo() -> str:
     s = get_settings()
