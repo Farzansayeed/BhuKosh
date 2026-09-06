@@ -81,7 +81,13 @@ gitignored — never commit real credentials.
 - [x] EVIDENCE REPLAY + LAYOUT — GET /fields/{id}/replay returns the full provenance chain (candidate → run → document → page) **including the visual evidence crop**: vision runs return per-field bounding boxes, the exact pixels are cut from the scan (content-addressed), and the UI renders them in the Evidence dialog
 - [x] VISION UI — Upload page has a vision mode (scan in, fields + crops out, any Indic script); Evidence dialog shows the crop image for every vision-extracted value
 - [x] WEB UI — React/Vite workspace: login (RBAC-aware), records list, record view with per-field evidence chain + corrections + decisions, upload-to-record pipeline, audit viewer, JSON/CSV export download (Hindi/English labels)
-- [ ] REMAINING: review-queue ranking, evaluation harness, demo kit (seed data, offline mode, PWA install, video)
+- [x] CONFIDENCE (PS #11) — engine self-reported per-field 0–1 scores stored on candidates; any core field below 0.6 routes the record to REVIEW_REQUIRED
+- [x] PDF VISION (PS #8) — scanned PDFs extract natively through the same vision path (honest mime detection; crop math skipped for multi-page PDFs)
+- [x] 12-FIELD SCHEMA (PS #9) — full problem-statement field set: 4 core fields gate workflow routing, 8 extended fields (khata, survey, tehsil, district, classification, ownership, mutation, registration) captured when present
+- [x] DASHBOARD (PS #16) — GET /stats + UI: records by state, accuracy proxy (1 − correction rate), open anomalies by rule, engine run stats, district/village progress
+- [x] LEARNING LOOP (PS #13) — reviewer corrections become few-shot guidance injected into future extraction prompts (GET /learning/hints); hints_count audited per run
+- [x] DEMO DATA — `scripts/seed_demo.py` seeds 8 records across pipeline states incl. a live area-jump anomaly (works against local or production)
+- [ ] REMAINING: review-queue ranking, evaluation harness, PWA install, demo video
 
 ## Deployment (Vercel + Supabase)
 
