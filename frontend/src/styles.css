@@ -55,12 +55,15 @@ h2 { font-size: 15px; margin: 18px 0 8px; color: var(--muted); text-transform: u
   overflow-x: auto; /* wide tables scroll inside the card, not off the page */
 }
 
-table { width: 100%; border-collapse: collapse; }
+table { width: 100%; min-width: 600px; border-collapse: collapse; }
+/* the permission matrix is 6 columns wide with descriptions — needs more room */
+.matrix-table { min-width: 880px; }
 th {
   text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
   color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border);
 }
-td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td .badge, td .chip { white-space: nowrap; }
 tr:hover td { background: var(--panel-2); }
 
 .btn {
@@ -172,3 +175,18 @@ tr:hover td { background: var(--panel-2); }
 /* Admin console */
 .chip-ok { background: rgba(34,197,94,0.2); color: #22c55e; cursor: pointer; border: none; }
 .chip-off { background: rgba(100,116,139,0.15); color: #64748b; cursor: pointer; border: none; }
+
+/* --- Narrow screens / high zoom: sidebar collapses to a top bar, tables scroll --- */
+@media (max-width: 760px) {
+  .layout { flex-direction: column; }
+  .sidebar {
+    width: 100%; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 10px;
+    padding: 10px 12px; border-right: none; border-bottom: 1px solid var(--border);
+  }
+  .brand { padding: 0 6px 0 0; font-size: 16px; }
+  .nav-link { display: inline-block; padding: 6px 9px; }
+  .nav-link.active { border-left: none; border-bottom: 2px solid var(--accent); }
+  .sidebar .spacer { display: none; }
+  .user-box { border-top: none; padding-top: 0; margin-left: auto; white-space: nowrap; }
+  .main { padding: 14px; max-width: none; width: 100%; }
+}

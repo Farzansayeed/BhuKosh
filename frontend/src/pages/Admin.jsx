@@ -190,7 +190,7 @@ function Permissions({ perm, act }) {
           Toggles apply immediately — no redeploy. Granting a permission another role already
           holds will show you which. Admin always retains everything (last-resort authority).
         </p>
-        <table>
+        <table className="matrix-table">
           <thead>
             <tr>
               <th style={{ textAlign: 'left' }}>Permission</th>
