@@ -32,7 +32,9 @@ def structured_extract(text: str, schema: dict, *, timeout: float = 120.0) -> di
     return _generate(body, timeout)
 
 
-def structured_extract_image(image_bytes: bytes, mime_type: str, schema: dict, *, timeout: float = 180.0) -> dict:
+def structured_extract_image(
+    image_bytes: bytes, mime_type: str, schema: dict, *, prompt: str | None = None, timeout: float = 180.0
+) -> dict:
     """Vision structured-output call: the scanned page itself is the input."""
     s = get_settings()
     if not s.gemini_api_key:
@@ -40,7 +42,7 @@ def structured_extract_image(image_bytes: bytes, mime_type: str, schema: dict, *
 
     body = {
         "contents": [{"parts": [
-            {"text": "Extract from this scanned land-record document."},
+            {"text": prompt or "Extract from this scanned land-record document."},
             {"inline_data": {"mime_type": mime_type, "data": base64.b64encode(image_bytes).decode()}},
         ]}],
         "generationConfig": {

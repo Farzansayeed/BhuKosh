@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { api } from '../api'
+import CropImage from '../CropImage'
 import { useAuth } from '../auth'
 
 function EvidenceDialog({ fieldId, onClose }) {
@@ -35,6 +36,15 @@ function EvidenceDialog({ fieldId, onClose }) {
               <dt>N-best rank</dt><dd>{chain.candidate.nbest_rank}</dd>
               <dt>is_unknown</dt><dd>{String(chain.candidate.is_unknown)}</dd>
             </dl>
+            {chain.candidate.crop_id && (
+              <>
+                <h2>Evidence crop — the exact pixels this value was read from</h2>
+                <CropImage cropId={chain.candidate.crop_id} />
+                <p className="muted mono" style={{ fontSize: 12 }}>
+                  bbox (px): [{(chain.candidate.crop_bbox || []).join(', ')}]
+                </p>
+              </>
+            )}
             <h2>Extraction run</h2>
             <dl className="kv">
               <dt>Run</dt><dd>#{chain.run.id} ({chain.run.kind}, {chain.run.status})</dd>

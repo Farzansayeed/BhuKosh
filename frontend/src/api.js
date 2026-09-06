@@ -57,6 +57,20 @@ export async function api(path, { method = 'GET', body, formData } = {}) {
   return finish(resp)
 }
 
+// Authenticated binary download (crop images, exports): returns a Blob.
+export async function apiBlob(path) {
+  const auth = loadAuth()
+  const resp = await fetch(`/api${path}`, {
+    headers: auth?.access_token ? { Authorization: `Bearer ${auth.access_token}` } : {},
+  })
+  if (!resp.ok) {
+    let detail = `${resp.status} ${resp.statusText}`
+    try { const j = await resp.json(); detail = j.detail || detail } catch { /* not json */ }
+    throw new Error(detail)
+  }
+  return resp.blob()
+}
+
 async function finish(resp) {
   if (resp.ok) {
     const ct = resp.headers.get('content-type') || ''

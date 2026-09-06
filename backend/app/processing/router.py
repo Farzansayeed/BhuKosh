@@ -14,17 +14,18 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import storage
+from . import crops as crops_svc
 from ..auth.dependencies import get_current_user, require_roles
 from ..config import get_settings
 from ..db import conninfo
 from ..errors import Problem
 from ..extract import gemini_client, rate_limit
-from ..extract.schema import KHASRA_SCHEMA, PROMPT
+from ..extract.schema import FIELD_BBOXES_SCHEMA, KHASRA_SCHEMA, PROMPT, VISION_ANNOTATE
 
 router = APIRouter(tags=["processing"])
 
 WRITE_ROLES = ("operator", "checker", "certifier", "admin")
-PROMPT_ID, PROMPT_VERSION = "khasra_register", "1"
+PROMPT_ID, PROMPT_VERSION = "khasra_register", "2"
 FIELDS = ("khasra_no", "owner_name", "area_raw", "village")
 
 
@@ -69,7 +70,28 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
         conn.commit()
 
     try:
-        raw = gemini_client.structured_extract_image(image_bytes, mime, KHASRA_SCHEMA)
+        combined = {
+            **KHASRA_SCHEMA["properties"],
+            **FIELD_BBOXES_SCHEMA["properties"],
+        }
+        vision_schema = {"type": "OBJECT", "properties": combined}
+        raw = gemini_client.structured_extract_image(
+            image_bytes, mime, vision_schema, prompt=f"{PROMPT}\n\n{VISION_ANNOTATE}"
+        )
+        fields = {f: raw.get(f) for f in FIELDS}
+        bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS}
+
+        # LAYOUT: materialize one evidence crop per non-null bbox.
+        # (Page pixels = the document scan; pages carry metadata, documents carry bytes.)
+        crop_rows: dict[str, dict] = {}
+        if any(bboxes.values()):
+            for f, bb in bboxes.items():
+                if bb:
+                    try:
+                        crop_rows[f] = crops_svc.store_crop(page_id, page["storage_uri"], bb)
+                    except ValueError:
+                        pass  # degenerate box from the engine: skip the crop, keep the value
+
         raw_doc = {
             "run_id": run["id"],
             "model": s.gemini_model,
@@ -78,19 +100,29 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
             "prompt_version": PROMPT_VERSION,
             "input_sha256": input_hash,
             "page_no": page["seq_no"],
-            "result": raw,
+            "result": {**fields, **{f"{f}_bbox": bboxes[f] for f in FIELDS}},
         }
         raw_bytes = json.dumps(raw_doc, ensure_ascii=False, sort_keys=True).encode("utf-8")
         uri = storage.save_document(raw_bytes, storage.sha256_bytes(raw_bytes))
 
         with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+            stored: dict[str, int | None] = {}
+            for f, cr in crop_rows.items():
+                row = conn.execute(
+                    """INSERT INTO evidence_crops (page_id, bbox, crop_hash, storage_uri)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT (page_id, crop_hash) DO UPDATE SET bbox = EXCLUDED.bbox
+                       RETURNING id""",
+                    (cr["page_id"], cr["bbox"], cr["crop_hash"], cr["storage_uri"]),
+                ).fetchone()
+                stored[f] = row["id"]
             for f in FIELDS:
-                v = raw.get(f)
+                v = fields[f]
                 conn.execute(
                     """INSERT INTO candidates
-                         (run_id, field_type, raw_value, value, is_unknown, nbest_rank, engine)
-                       VALUES (%s, %s, %s, %s, %s, 1, 'gemini-vision')""",
-                    (run["id"], f, v, v, v is None),
+                         (run_id, crop_id, field_type, raw_value, value, is_unknown, nbest_rank, engine)
+                       VALUES (%s, %s, %s, %s, %s, %s, 1, 'gemini-vision')""",
+                    (run["id"], stored.get(f), f, v, v, v is None),
                 )
             conn.execute(
                 "UPDATE processing_runs SET status = 'SUCCEEDED', finished_at = now(), "
@@ -101,7 +133,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
                 """INSERT INTO api_usage (username, route, status, model, prompt_chars, result_json)
                    VALUES (%s, '/extraction', 'ok', %s, 0, %s)""",
                 (user["username"], s.gemini_model,
-                 Jsonb({"run_id": run["id"], "mode": "image", "candidates": len(FIELDS)})),
+                 Jsonb({"run_id": run["id"], "mode": "image-layout",
+                        "candidates": len(FIELDS), "crops": len(stored)})),
             )
             conn.commit()
     except Exception as e:
@@ -118,7 +151,31 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
             )
             conn.commit()
         raise
-    return {"run_id": run["id"], "status": "SUCCEEDED", "document_id": page["document_id"], "page_id": page_id, "fields": raw}
+    return {
+        "run_id": run["id"],
+        "status": "SUCCEEDED",
+        "document_id": page["document_id"],
+        "page_id": page_id,
+        "fields": fields,
+        "crops": {f: cid for f, cid in stored.items() if cid},
+    }
+
+
+@router.get("/crops/{crop_id}/image")
+def get_crop_image(crop_id: int, user: dict = Depends(get_current_user)) -> object:
+    """The exact pixels a value was read from (Response: image/png)."""
+    from fastapi import Response
+
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        crop = conn.execute(
+            "SELECT crop_hash, storage_uri FROM evidence_crops WHERE id = %s", (crop_id,)
+        ).fetchone()
+    if crop is None:
+        raise Problem(404, "Not Found", "No such crop.")
+    data = storage.open_uri(crop["storage_uri"])
+    return Response(content=data, media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=31536000, immutable",
+                             "X-Crop-Sha256": crop["crop_hash"]})
 
 
 @router.post("/documents/{doc_id}/extract", status_code=201)

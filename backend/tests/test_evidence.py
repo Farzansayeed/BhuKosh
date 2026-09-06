@@ -50,7 +50,7 @@ def sandbox(monkeypatch, tmp_path):
     rec_ids = []
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         rows = conn.execute(
-            "SELECT id FROM land_records WHERE village_code = 'TEST-REPLAY'"
+            "SELECT id FROM land_records WHERE village_code = 'TEST-REPLAY' OR village_code LIKE 'TEST-%'"
         ).fetchall()
         rec_ids = [r["id"] for r in rows]
         if rec_ids:
@@ -183,3 +183,52 @@ def test_replay_before_projection_falls_back_to_run_chain(tokens, monkeypatch):
     )
     assert created.status_code == 201
     assert created.json()["run"]["status"] == "SUCCEEDED"
+
+
+def test_replay_includes_crop_for_vision_fields(tokens, monkeypatch):
+    """Vision-extracted fields replay with crop_id + bbox for the UI dialog."""
+    import io as _io
+
+    from PIL import Image as _Image
+    from starlette.testclient import TestClient as _TC
+
+    from app.main import app as _app
+
+    monkeypatch.setattr(
+        gemini_client, "structured_extract_image",
+        lambda image_bytes, mime, schema, **kw: {
+            "khasra_no": "૫૫૯", "owner_name": "ભુલાજી ખોડાજી",
+            "area_raw": "41.76", "village": "TEST-REPLAY",  # TEST-* so fixture cleanup finds it
+            "khasra_no_bbox": [100, 100, 300, 140],
+            "owner_name_bbox": None, "area_raw_bbox": None, "village_bbox": None,
+        },
+    )
+    _buf = _io.BytesIO()
+    _t = time.time_ns()
+    _Image.new("RGB", (60, 40), (_t % 251 + 1, (_t // 251) % 251 + 1, (_t // 63001) % 251 + 1)).save(_buf, "PNG")
+
+    c = _TC(app, raise_server_exceptions=False)
+    tok = c.post("/auth/login", json={"username": "operator", "password": "operator-dev"}).json()["access_token"]
+    h = {"Authorization": f"Bearer {tok}"}
+
+    m = c.post("/intake", json={"register_ref": f"TEST-REPLAY-CROP-{time.time_ns()}",
+                                "centre": "c", "device": "d", "expected_count": 1}, headers=h).json()
+    d = c.post("/documents", data={"manifest_id": str(m["id"])},
+               files={"file": ("t.png", _buf.getvalue(), "image/png")}, headers=h).json()
+    p = c.post(f"/documents/{d['id']}/pages", json={"seq_no": 1, "sha256": d["sha256"]}, headers=h).json()
+    v = c.post(f"/pages/{p['id']}/extract-image", headers=h)
+    assert v.status_code == 201, v.text
+    run_id = v.json()["run_id"]
+
+    rec = c.post(f"/records/from-run/{run_id}", headers=h)
+    assert rec.status_code == 201, rec.text
+    for f in rec.json()["fields"]:
+        chain = c.get(f"/fields/{f['id']}/replay", headers=h).json()
+        cand = chain["candidate"]
+        if f["field_type"] == "khasra_no":
+            assert cand["crop_id"] is not None
+            assert cand["crop_bbox"] and len(cand["crop_bbox"]) == 4
+            img = c.get(f"/crops/{cand['crop_id']}/image", headers=h)
+            assert img.status_code == 200 and img.content.startswith(b"\x89PNG")
+        else:
+            assert cand["crop_id"] is None

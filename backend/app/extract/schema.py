@@ -15,6 +15,22 @@ KHASRA_SCHEMA = {
     "required": ["khasra_no", "owner_name", "area_raw"],
 }
 
+# Vision (LAYOUT) target: the same fields, each with the pixel bbox of the
+# exact region it was read from — [x1, y1, x2, y2] normalized to 0..1000.
+# The engine refines from full-page scanning to region-bound evidence.
+FIELD_BBOXES_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        f"{name}_bbox": {
+            "type": "ARRAY",
+            "items": {"type": "INTEGER"},
+            "nullable": True,
+            "description": f"[x1, y1, x2, y2] of the '{name}' value, 0..1000 normalized",
+        }
+        for name in ("khasra_no", "owner_name", "area_raw", "village")
+    },
+}
+
 PROMPT = (
     "You are reading a line/section from an Indian land-record register "
     "(khatauni/jamabandi), possibly handwritten or Hindi/English mixed. "
@@ -32,4 +48,12 @@ PROMPT = (
     "Keep each value in its printed script (Devanagari stays Devanagari, "
     "Gujarati stays Gujarati). "
     "If a field is unreadable or absent, return null for it instead of guessing."
+)
+
+VISION_ANNOTATE = (
+    "After extracting each field, report the pixel region it was read from as a "
+    "tight bounding box [x1, y1, x2, y2] with all coordinates normalized to a "
+    "0..1000 scale relative to the full image (regardless of true pixel size). "
+    "The box must cover exactly the printed value, not the whole cell or row. "
+    "If a field is null, its bbox must also be null."
 )

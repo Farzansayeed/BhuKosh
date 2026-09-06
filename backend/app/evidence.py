@@ -26,7 +26,10 @@ def replay(field_id: int, user: dict = Depends(get_current_user)) -> dict:
         cand = None
         if field["selected_candidate_id"]:
             cand = conn.execute(
-                "SELECT * FROM candidates WHERE id = %s", (field["selected_candidate_id"],)
+                """SELECT c.*, cr.bbox AS crop_bbox
+                     FROM candidates c LEFT JOIN evidence_crops cr ON cr.id = c.crop_id
+                    WHERE c.id = %s""",
+                (field["selected_candidate_id"],),
             ).fetchone()
         run = None
         if cand:
@@ -64,6 +67,8 @@ def replay(field_id: int, user: dict = Depends(get_current_user)) -> dict:
             "confidence": cand["confidence"],
             "nbest_rank": cand["nbest_rank"],
             "engine": cand["engine"],
+            "crop_id": cand["crop_id"],
+            "crop_bbox": cand.get("crop_bbox"),
         },
         "run": {
             "id": run["id"],

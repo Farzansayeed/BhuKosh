@@ -78,6 +78,7 @@ def main() -> int:
         print(f"  {k:12s} {v if v is not None else '(UNKNOWN)'}")
 
     run_id = out["run_id"]
+    print(f"  crops: {out.get('crops') or '{}'}")
     r = c.get(f"/extraction/runs/{run_id}", headers=h)
     assert r.status_code == 200, r.text
     body = r.json()
@@ -88,6 +89,21 @@ def main() -> int:
     fields = {f["field_type"]: f for f in cands}
     assert fields["owner_name"]["value"] == out["fields"]["owner_name"]
     print("evidence   candidates stored, values match run output")
+
+    # LAYOUT: every candidate with a crop must serve real PNG pixels.
+    linked = {f: c["crop_id"] for f, c in fields.items() if c.get("crop_id")}
+    print(f"layout     {len(linked)} field(s) crop-bound: {sorted(linked)}")
+    if not linked:
+        print("           (engine returned no usable bboxes this run)")
+    for f, cid in linked.items():
+        img_r = c.get(f"/crops/{cid}/image", headers=h)
+        assert img_r.status_code == 200, img_r.text
+        assert img_r.headers["content-type"] == "image/png"
+        assert img_r.headers["x-crop-sha256"]
+        print(f"           crop #{cid} ({f}): {len(img_r.content)} bytes PNG OK")
+        noauth = c.get(f"/crops/{cid}/image")
+        assert noauth.status_code == 401
+        break
 
     print("\nVISION SMOKE GREEN")
     return 0

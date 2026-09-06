@@ -68,7 +68,8 @@ gitignored — never commit real credentials.
 - [x] AUDIT — hash-chained audit_events (trigger-enforced append-only), emitted in the decision transaction, /audit/events + chain-head + verify
 - [x] EXPORTS — immutable JSON/CSV snapshots with evidence manifest (document hashes, rulebook version, decision trail), trigger-enforced
 - [x] DATA MODEL COMPLETE — all 14 core tables of plan §5
-- [x] EVIDENCE REPLAY — GET /fields/{id}/replay: every displayed value one click from its full provenance chain (candidate → run → document → page)
+- [x] EVIDENCE REPLAY + LAYOUT — GET /fields/{id}/replay returns the full provenance chain (candidate → run → document → page) **including the visual evidence crop**: vision runs return per-field bounding boxes, the exact pixels are cut from the scan (content-addressed), and the UI renders them in the Evidence dialog
+- [x] VISION UI — Upload page has a vision mode (scan in, fields + crops out, any Indic script); Evidence dialog shows the crop image for every vision-extracted value
 - [x] WEB UI — React/Vite workspace: login (RBAC-aware), records list, record view with per-field evidence chain + corrections + decisions, upload-to-record pipeline, audit viewer, JSON/CSV export download (Hindi/English labels)
 - [ ] REMAINING: review-queue ranking, evaluation harness, demo kit (seed data, offline mode, PWA install, video)
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import CropImage from '../CropImage'
 import { useAuth } from '../auth'
 
 export default function UploadPage() {
@@ -12,6 +13,7 @@ export default function UploadPage() {
   const [device, setDevice] = useState('')
   const [file, setFile] = useState(null)
   const [text, setText] = useState('')
+  const [visionMode, setVisionMode] = useState(true)
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState('')
   const [error, setError] = useState(null)
@@ -44,10 +46,17 @@ export default function UploadPage() {
       setStep('Registering page…')
       const p = await api(`/documents/${d.id}/pages`, { method: 'POST', body: { seq_no: 1, sha256: d.sha256 } })
 
-      setStep('Extracting fields (Gemini)…')
-      const ex = await api(`/documents/${d.id}/extract`, { method: 'POST', body: { text, page_id: p.id } })
+      let ex
+      if (visionMode) {
+        setStep('Reading the scan (vision, any Indic script — up to a minute)…')
+        const v = await api(`/pages/${p.id}/extract-image`, { method: 'POST' })
+        ex = { run: { id: v.run_id, status: v.status }, candidates: [], crops: v.crops || {}, fields: v.fields }
+      } else {
+        setStep('Extracting fields (Gemini)…')
+        ex = await api(`/documents/${d.id}/extract`, { method: 'POST', body: { text, page_id: p.id } })
+      }
 
-      setResult({ manifest: m, document: d, page: p, run: ex.run, candidates: ex.candidates })
+      setResult({ manifest: m, document: d, page: p, ...ex })
       setStep('')
     } catch (err) {
       setError(`${step ? step + ' ' : ''}failed: ${err.message}`)
@@ -92,20 +101,32 @@ export default function UploadPage() {
           </div>
         </div>
 
-        <h2>2 · Scan + register text</h2>
+        <h2>2 · Scan and input mode</h2>
         <div className="field">
-          <label>Page image (PNG/JPEG/PDF, single page)</label>
-          <input type="file" accept="image/png,image/jpeg,application/pdf"
+          <label>Page image (PNG/JPEG, single page)</label>
+          <input type="file" accept="image/png,image/jpeg"
                  onChange={(e) => setFile(e.target.files[0] ?? null)} required />
         </div>
         <div className="field">
-          <label>Register line to extract (Devanagari or English)</label>
-          <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
-                    placeholder="राम प्रसाद पुत्र श्याम लाल, खसरा २३४, क्षेत्र २-४० बीघा, ग्राम सलेमपुर" required />
+          <label>
+            <input type="radio" checked={!visionMode} onChange={() => setVisionMode(false)} /> Text mode —
+            paste the register line (fast, uses the typed text)
+          </label>
+          <label>
+            <input type="radio" checked={visionMode} onChange={() => setVisionMode(true)} /> Vision mode —
+            read the scan directly (any Indic script; slower, returns evidence crops per field)
+          </label>
         </div>
+        {!visionMode && (
+          <div className="field">
+            <label>Register line to extract (Devanagari or English)</label>
+            <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
+                      placeholder="राम प्रसाद पुत्र श्याम लाल, खसरा २३४, क्षेत्र २-४० बीघा, ग्राम सलेमपुर" required />
+          </div>
+        )}
 
-        <button className="btn btn-primary" disabled={busy || !file || !text.trim()}>
-          {busy ? (step || 'Working…') : 'Run custody → extraction pipeline'}
+        <button className="btn btn-primary" disabled={busy || !file || (!visionMode && !text.trim())}>
+          {busy ? (step || 'Working…') : visionMode ? 'Run custody → vision pipeline' : 'Run custody → extraction pipeline'}
         </button>
       </form>
 
@@ -118,13 +139,21 @@ export default function UploadPage() {
             Manifest #{result.manifest.id} → Document #{result.document.id} (sha <span className="mono">{result.document.sha256.slice(0, 16)}…</span>) → Page #{result.page.id}
           </p>
           <div className="detail-grid">
-            {result.candidates.map((c) => (
-              <div key={c.id} className="value-card">
-                <div className="fv-label">{c.field_type.replace(/_/g, ' ')}</div>
-                <div className={`fv-value${c.is_unknown ? ' unknown' : ''}`}>{c.value ?? 'UNKNOWN'}</div>
-                <div className="muted mono">raw: {c.raw_value ?? '—'}{c.confidence != null ? ` · conf ${c.confidence}` : ''}</div>
-              </div>
-            ))}
+            {result.candidates.length > 0
+              ? result.candidates.map((c) => (
+                <div key={c.id} className="value-card">
+                  <div className="fv-label">{c.field_type.replace(/_/g, ' ')}</div>
+                  <div className={`fv-value${c.is_unknown ? ' unknown' : ''}`}>{c.value ?? 'UNKNOWN'}</div>
+                  <div className="muted mono">raw: {c.raw_value ?? '—'}{c.confidence != null ? ` · conf ${c.confidence}` : ''}</div>
+                </div>
+              ))
+              : Object.entries(result.fields || {}).map(([k, v]) => (
+                <div key={k} className="value-card">
+                  <div className="fv-label">{k.replace(/_/g, ' ')}</div>
+                  <div className={`fv-value${v == null ? ' unknown' : ''}`}>{v ?? 'UNKNOWN'}</div>
+                  {result.crops?.[k] != null && <CropImage cropId={result.crops[k]} maxWidth={220} />}
+                </div>
+              ))}
           </div>
           {recordId
             ? <div className="ok-box">Record created — <Link to={`/records/${recordId}`}>open record #{recordId} →</Link></div>

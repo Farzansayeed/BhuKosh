@@ -248,7 +248,7 @@ def test_get_run_and_list_runs(tokens, monkeypatch):
 # ------------------------------------------------------- vision (image) path ----
 
 def test_vision_extract_lifecycle(tokens, monkeypatch):
-    """Image extraction: run bound to stored page bytes, engine stubbed."""
+    """Image extraction: run bound to stored page bytes, crops bound to fields."""
     from app.extract import gemini_client
 
     monkeypatch.setattr(
@@ -256,9 +256,19 @@ def test_vision_extract_lifecycle(tokens, monkeypatch):
         lambda image_bytes, mime, schema, **kw: {
             "khasra_no": "૫૫૯", "owner_name": "ભુલાજી ખોડાજી",
             "area_raw": "41.76", "village": "ઓઢવ",
+            # engine-returned boxes: two valid, one degenerate (must be skipped), one null
+            "khasra_no_bbox": [100, 100, 300, 140],
+            "owner_name_bbox": [100, 200, 400, 240],
+            "area_raw_bbox": [0, 0, 0, 0],
+            "village_bbox": None,
         },
     )
-    combo = _make_doc_with_page(tokens["operator"])
+    # A real (uniquely-colored) PNG: crops must decode actual pixels.
+    import io as _io
+    from PIL import Image as _Image
+    _buf = _io.BytesIO()
+    _Image.new("RGB", (60, 40), (time.time_ns() // 1000 % 251 + 1,) * 3).save(_buf, "PNG")
+    combo = _make_doc_with_page(tokens["operator"], content=_buf.getvalue())
     page_id = combo["page"]["id"]
 
     r = client.post(
@@ -279,6 +289,7 @@ def test_vision_extract_lifecycle(tokens, monkeypatch):
     run = detail["run"]
     assert run["status"] == "SUCCEEDED"
     assert run["engine_name"] == "gemini-vision"
+    assert run["prompt_version"] == "2"
     assert run["document_id"] == combo["document"]["id"]
     assert run["page_id"] == page_id
     # input hash = sha256 of the exact stored page bytes
@@ -290,6 +301,22 @@ def test_vision_extract_lifecycle(tokens, monkeypatch):
     assert all(c["engine"] == "gemini-vision" for c in detail["candidates"])
     assert by_field["area_raw"]["value"] == "41.76"
     assert not any(c["is_unknown"] for c in detail["candidates"])
+
+    # LAYOUT: exactly the two valid boxes produced crop-linked candidates.
+    linked = {f: c["crop_id"] for f, c in by_field.items() if c["crop_id"]}
+    assert set(linked) == {"khasra_no", "owner_name"}
+    assert payload["crops"] == linked
+
+    # Crop pixels: authenticated PNG download, 401 without a token.
+    cid = linked["khasra_no"]
+    img = client.get(f"/crops/{cid}/image", headers={"Authorization": f"Bearer {tokens['auditor']}"})
+    assert img.status_code == 200
+    assert img.headers["content-type"] == "image/png"
+    assert img.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert client.get(f"/crops/{cid}/image").status_code == 401
+    assert client.get(
+        "/crops/999999/image", headers={"Authorization": f"Bearer {tokens['auditor']}"}
+    ).status_code == 404
 
 
 def test_vision_run_failure_is_sanitized(tokens, monkeypatch):

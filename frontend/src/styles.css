@@ -125,3 +125,10 @@ tr:hover td { background: var(--panel-2); }
 .value-card .fv-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
 .value-card .fv-value { font-size: 17px; margin: 4px 0 8px; word-break: break-word; }
 .value-card .unknown { color: var(--warn); font-style: italic; }
+
+.crop-img {
+  display: block;
+  border: 1px solid #444;
+  border-radius: 4px;
+  margin: 6px 0;
+}
