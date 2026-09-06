@@ -28,6 +28,9 @@ a:hover { text-decoration: underline; }
   width: 210px; flex-shrink: 0; background: var(--panel);
   border-right: 1px solid var(--border); padding: 16px 12px;
   display: flex; flex-direction: column; gap: 4px;
+  /* static left panel: always exactly viewport-height and pinned — the page
+     content scrolls on the right, the sidebar never stretches or moves */
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
 }
 .brand { font-size: 18px; font-weight: 700; padding: 6px 8px 14px; letter-spacing: 0.5px; }
 .brand span { color: var(--accent); }
@@ -182,6 +185,8 @@ tr:hover td { background: var(--panel-2); }
   .sidebar {
     width: 100%; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 10px;
     padding: 10px 12px; border-right: none; border-bottom: 1px solid var(--border);
+    /* top-bar mode: pin to the top of the viewport instead */
+    position: sticky; top: 0; height: auto; overflow: visible; z-index: 20;
   }
   .brand { padding: 0 6px 0 0; font-size: 16px; }
   .nav-link { display: inline-block; padding: 6px 9px; }
