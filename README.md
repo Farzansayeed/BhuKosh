@@ -201,25 +201,41 @@ npm run build      # production bundle in dist/
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `STORAGE_BACKEND` | Object storage (auto by default) |
 | `APP_NAME`, `ENV`, `HOST`, `PORT` | Basics |
 
-## Status
+## Project layout
 
-- [x] FOUNDATION — repo, portable Postgres, config, auth (JWT + RBAC), health, authz tests
-- [x] EXTRACTION (prototype slice) — /extract with server-held Gemini key, per-user rate limit, usage log
-- [x] CUSTODY + EVIDENCE — intake manifests, documents (SHA-256 dedup 409), pages, content-addressed storage, manifest verification
-- [x] PROCESSING — evidence-bound extraction runs; **vision extraction** (any Indic script — Gujarati VF-6 verified live); input hash = SHA-256 of the page bytes; raw outputs preserved
-- [x] LAYOUT + VISION UI — per-field bounding boxes → evidence crops; Evidence dialog shows the exact pixels; Upload page vision mode
-- [x] PROJECTIONS + DECISIONS — state machine, single audited write path, claim locks (423), optimistic versioning (409)
-- [x] VALIDATION — versioned rule registry, anomalies with plain-language explanations, cross-document area-jump join, audited resolution
-- [x] AUDIT — hash-chained audit_events (trigger-enforced), chain verification
-- [x] EXPORTS — immutable JSON/CSV snapshots with evidence manifests
-- [x] CONFIDENCE (PS #11) — per-field scores; low confidence routes to review
-- [x] PDF VISION (PS #8) — scanned PDFs extract natively
-- [x] 12-FIELD SCHEMA (PS #9) — core 4 gate routing, extended 8 captured when present
-- [x] DASHBOARD (PS #16) — /stats + UI
-- [x] LEARNING LOOP (PS #13) — corrections → few-shot hints, inspectable at /learning/hints
-- [x] WEB UI — login (RBAC-aware), records, record view with evidence chain + corrections, upload-to-record pipeline, audit viewer, dashboard, exports
-- [x] DEMO DATA — `scripts/seed_demo.py` (8 records, anomaly pair, local or production)
-- [ ] REMAINING: review-queue ranking, evaluation harness (accuracy benchmarks), PWA install, demo video
+```
+sih26018/
+├── backend/
+│   ├── api/index.py            # Vercel serverless entrypoint
+│   ├── app/                    # the FastAPI application
+│   │   ├── auth/               #   login, refresh, RBAC dependencies
+│   │   ├── custody/            #   intake manifests, documents, pages (chain of custody)
+│   │   ├── processing/         #   extraction runs + vision path + evidence crops
+│   │   ├── extract/            #   Gemini client, schemas, prompt ledger, rate limit
+│   │   ├── records/            #   land_records state machine + decisions
+│   │   ├── rules/              #   validation registry + anomaly service
+│   │   ├── evidence.py         #   /fields/{id}/replay provenance chain
+│   │   ├── audit/              #   hash-chained audit events + verification
+│   │   ├── exports/            #   immutable JSON/CSV snapshots + manifests
+│   │   ├── stats/              #   /stats dashboard aggregation
+│   │   ├── learning/           #   corrections → extraction hints (PS #13)
+│   │   ├── storage.py          #   Supabase Storage ↔ local disk, auto-selected
+│   │   ├── config.py, db.py, errors.py
+│   │   └── main.py             #   app assembly + /health
+│   ├── scripts/                # db_migrate, seed_users, seed_demo, smoke_*, check_*, gen_secret
+│   ├── tests/                  # pytest suite (stubbed engine — CI-safe, no quota)
+│   └── requirements.txt
+├── frontend/                   # React + Vite SPA
+│   └── src/pages/              # Login, Dashboard, Records, RecordView, Upload, Audit
+├── infra/
+│   ├── migrations/             # 8 SQL migrations (the whole 14-table data model)
+│   └── pgdata/                 # portable local Postgres cluster (offline mode)
+└── scripts/pg_start.bat        # local PG helper
+```
+
+Every module maps to one pipeline stage — `custody` is SOURCE/EVIDENCE, `processing` is
+LAYOUT/EXTRACTION, `rules` is REASONING, `records` is VERIFICATION, `audit` + `exports`
+are PROVENANCE/TRUSTED OUTPUT — so the codebase reads the same way the pitch does.
 
 ## What to expect (honest caveats)
 
