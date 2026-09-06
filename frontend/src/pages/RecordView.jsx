@@ -181,12 +181,12 @@ function StateActions({ record, onDone }) {
   const decideRoles = ['checker', 'certifier', 'admin'].includes(role)
   const certifyRoles = ['certifier', 'admin'].includes(role)
   const isAdmin = role === 'admin'
-  const finalized = ['VERIFIED', 'OFFICER_CERTIFIED'].includes(state)
-  // Reopen: REJECTED anyone deciding; VERIFIED/OFFICER_CERTIFIED = admin only
-  // (a finalized decision is re-opened only by the highest authority).
-  const canReopen = !finalized || isAdmin
   const ver = record.record_version
   const state = record.current_state
+  // Reopen: REJECTED anyone deciding; VERIFIED/OFFICER_CERTIFIED = admin only
+  // (a finalized decision is re-opened only by the highest authority).
+  const finalized = ['VERIFIED', 'OFFICER_CERTIFIED'].includes(state)
+  const canReopen = !finalized || isAdmin
 
   const act = async (decision_type, extra = {}) => {
     setBusy(true)
