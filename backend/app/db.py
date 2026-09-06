@@ -42,3 +42,58 @@ def get_connection():
     """FastAPI dependency: one dict-row connection per request."""
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         yield conn
+
+
+# --- Warm connection reuse (hot paths) --------------------------------------
+#
+# Every psycopg.connect() to the hosted pooler costs a fresh DNS + TLS + auth
+# round-trip (~0.5-2 s). For per-request hot paths (auth on EVERY endpoint,
+# records search) that dwarfs the actual query time. Here we keep ONE warm,
+# autocommit, dict-row connection per worker thread: ping, reuse, reconnect on
+# failure. Read-only use only — write paths keep their own transactional
+# `with psycopg.connect(...)` blocks.
+import threading
+import time  # noqa: E402
+
+_tls = threading.local()
+_PING_AFTER_IDLE_S = 30.0
+
+
+def get_conn():
+    """Thread-local warm connection in autocommit mode (SELECT-only paths).
+
+    Reused as-is; a liveness ping runs only after 30s idle, and a failed
+    first query is the caller's signal to retry once on a fresh connection
+    (get_conn(retry=True) helper below)."""
+    conn = getattr(_tls, "conn", None)
+    now = time.monotonic()
+    if conn is not None and not conn.closed:
+        if now - getattr(_tls, "last_used", 0) < _PING_AFTER_IDLE_S:
+            _tls.last_used = now
+            return conn
+        try:  # idle long enough to warrant a cheap ping
+            conn.execute("SELECT 1")
+            _tls.last_used = now
+            return conn
+        except Exception:  # noqa: BLE001 — stale: rebuild
+            try:
+                conn.close()
+            except Exception:
+                pass
+    conn = psycopg.connect(conninfo(), row_factory=dict_row)
+    conn.autocommit = True
+    conn.prepare_threshold = None  # PgBouncer transaction-pooling safe
+    _tls.conn = conn
+    _tls.last_used = now
+    return conn
+
+
+def reset_conn():
+    """Drop the thread's warm connection (call once after a query failure)."""
+    conn = getattr(_tls, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    _tls.conn = None

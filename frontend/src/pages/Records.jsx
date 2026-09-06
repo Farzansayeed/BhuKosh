@@ -25,28 +25,36 @@ export default function RecordsPage() {
   const [state, setState] = useState('')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState({ by: 'id', order: 'desc' })
+  const [searching, setSearching] = useState(false)
 
-  const load = async () => {
-    setError(null)
-    setRows(null)
-    try {
-      const qs = new URLSearchParams()
-      if (state) qs.set('state', state)
-      if (search.trim()) qs.set('search', search.trim())
-      qs.set('sort_by', sort.by)
-      qs.set('order', sort.order)
-      qs.set('limit', '200')
-      setRows(await api(`/records?${qs.toString()}`))
-    } catch (e) {
-      setError(e.message)
-    }
-  }
-
-  useEffect(() => { load() }, [state, sort.by, sort.order])
+  // Live search: fires as you type (250ms debounce), aborts the previous
+  // in-flight request so results always match what's in the box, and keeps
+  // the current rows visible (dimmed) while a new request runs.
+  useEffect(() => {
+    const ctrl = new AbortController()
+    const t = setTimeout(async () => {
+      setSearching(true)
+      setError(null)
+      try {
+        const qs = new URLSearchParams()
+        if (state) qs.set('state', state)
+        if (search.trim()) qs.set('search', search.trim())
+        qs.set('sort_by', sort.by)
+        qs.set('order', sort.order)
+        qs.set('limit', '200')
+        const data = await api(`/records?${qs.toString()}`, { signal: ctrl.signal })
+        setRows(data)
+      } catch (e) {
+        if (e.name !== 'AbortError') setError(e.message)
+      } finally {
+        setSearching(false)
+      }
+    }, 250)
+    return () => { clearTimeout(t); ctrl.abort() }
+  }, [state, search, sort.by, sort.order])
 
   const submitSearch = (e) => {
-    e.preventDefault()
-    load()
+    e.preventDefault()  // Enter still works; the debounce usually beats it
   }
 
   const flip = (key) => setSort((s) =>
@@ -64,14 +72,14 @@ export default function RecordsPage() {
         <form onSubmit={submitSearch} className="row" style={{ gap: 6, flex: '1 1 260px', maxWidth: 440 }}>
           <div className="field" style={{ marginBottom: 0, flex: 1 }}>
             <input
-              placeholder="Search village, khasra, owner, khata, survey…"
+              placeholder="Search id, village, khasra, owner, survey…  (live as you type)"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary btn-sm" type="submit">Search</button>
+          {searching && <span className="muted" style={{ fontSize: 12 }}>searching…</span>}
           {search && (
-            <button className="btn btn-sm" type="button" onClick={() => { setSearch(''); load() }}>Clear</button>
+            <button className="btn btn-sm" type="button" onClick={() => setSearch('')}>Clear</button>
           )}
         </form>
         <div className="field" style={{ marginBottom: 0 }}>
@@ -91,7 +99,7 @@ export default function RecordsPage() {
       )}
 
       {rows && rows.length > 0 && (
-        <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+        <div className="card" style={{ padding: 0, overflowX: 'auto', opacity: searching ? 0.6 : 1, transition: 'opacity 150ms' }}>
           <table>
             <thead>
               <tr>

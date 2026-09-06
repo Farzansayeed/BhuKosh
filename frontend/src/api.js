@@ -19,7 +19,7 @@ export function clearAuth() {
 // Thin fetch wrapper: JSON in/out, bearer token attached, RFC-7807 problem
 // detail surfaced as a thrown Error with .status/.detail/.problem so pages
 // can render honest error messages.
-export async function api(path, { method = 'GET', body, formData } = {}) {
+export async function api(path, { method = 'GET', body, formData, signal } = {}) {
   const auth = loadAuth()
   const headers = {}
   if (auth?.access_token) headers['Authorization'] = `Bearer ${auth.access_token}`
@@ -28,6 +28,7 @@ export async function api(path, { method = 'GET', body, formData } = {}) {
   const resp = await fetch(`/api${path}`, {
     method,
     headers,
+    signal,
     body: formData ? formData : body !== undefined ? JSON.stringify(body) : undefined,
   })
 

@@ -4,6 +4,8 @@ RBAC (plan §6): reads for all staff; claim/decisions checker+ (certify:
 certifier/admin). Concurrency: 423 on someone else's active claim, 409 on
 stale record_version — both via the single write path in service.py.
 """
+import time
+
 import psycopg
 from fastapi import APIRouter, Depends, Query
 from psycopg.rows import dict_row
@@ -11,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from ..auth.dependencies import get_current_user
 from ..auth.permissions import require_permission
-from ..db import conninfo
+from ..db import conninfo, get_conn
 from ..errors import Problem
 from . import service
 
@@ -95,15 +97,14 @@ def list_records(
 ) -> list[dict]:
     """Search + sort + filter, executed entirely in Postgres.
 
-    Search: the term is matched against land_records (id/village/khasra/khata)
-    and every extracted field value (owner, survey, tehsil, district…). Fast
-    path uses the pg_trgm GIN indexes (migration 010) with similarity ranking;
-    if the extension is unavailable we fall back to a plain ILIKE scan — same
-    results, same API.
+    Search: the term matches land_records (id with PREFIX matching — "14"
+    finds #145 — village, khasra) and every extracted field value (owner,
+    survey, tehsil, district…). Fast path uses the pg_trgm GIN indexes
+    (migration 010) with similarity ranking; if the extension is unavailable
+    we fall back to a plain ILIKE scan — same results, same API.
 
     Sorting: whitelisted columns only (never interpolate user input into SQL).
     'confidence' sorts scored records first (best first), unscored last.
-    'relevance' is the default under search (trigram similarity rank).
     """
     SORTS = {
         "id":          "r.id",
@@ -121,15 +122,20 @@ def list_records(
         raise Problem(422, "Validation Failed",
                       f"sort_by must be one of {', '.join(sorted(SORTS))}.")
     order_sql = "ASC" if order == "asc" else "DESC"
-
     term = (search or "").strip()
-    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
-        try:
-            has_trgm = conn.execute(
-                "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')"
-            ).fetchone()["exists"]
-        except Exception:  # noqa: BLE001
-            has_trgm = False
+    id_prefix = term.isdigit()  # "14" should find #145, not just exact "145"
+
+    conn = get_conn()  # warm thread-local: search is latency-critical
+    if True:
+        global _has_trgm_cache
+        if _has_trgm_cache is None:
+            try:
+                _has_trgm_cache = conn.execute(
+                    "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')"
+                ).fetchone()["exists"]
+            except Exception:  # noqa: BLE001
+                _has_trgm_cache = False
+        has_trgm = _has_trgm_cache
 
         params: list = []
         where = []
@@ -138,29 +144,31 @@ def list_records(
             params.append(state)
         if term:
             like = f"%{term}%"
+            id_match = "r.id::text = %s" if not id_prefix else "r.id::text LIKE %s"
+            id_param = term if not id_prefix else f"{term}%"
             if has_trgm:
                 where.append(
-                    "(r.village_code %% %s OR r.khasra_no %% %s "
-                    "OR r.village_code ILIKE %s OR r.khasra_no ILIKE %s "
-                    "OR r.id::text = %s "
-                    "OR EXISTS (SELECT 1 FROM field_values fv WHERE fv.record_id = r.id "
-                    "AND (fv.current_value %% %s OR fv.current_value ILIKE %s)))"
+                    f"(r.village_code %% %s OR r.khasra_no %% %s "
+                    f"OR r.village_code ILIKE %s OR r.khasra_no ILIKE %s "
+                    f"OR {id_match} "
+                    f"OR EXISTS (SELECT 1 FROM field_values fv WHERE fv.record_id = r.id "
+                    f"AND (fv.current_value %% %s OR fv.current_value ILIKE %s)))"
                 )
-                params += [term, term, like, like, term, term, like]
+                params += [term, term, like, like, id_param, term, like]
             else:
                 where.append(
-                    "(r.village_code ILIKE %s OR r.khasra_no ILIKE %s OR r.id::text = %s "
-                    "OR EXISTS (SELECT 1 FROM field_values fv WHERE fv.record_id = r.id "
-                    "AND fv.current_value ILIKE %s))"
+                    f"(r.village_code ILIKE %s OR r.khasra_no ILIKE %s OR {id_match} "
+                    f"OR EXISTS (SELECT 1 FROM field_values fv WHERE fv.record_id = r.id "
+                    f"AND fv.current_value ILIKE %s))"
                 )
-                params += [like, like, term, like]
+                params += [like, like, id_param, like]
 
         where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
         if has_trgm and term:
-            sim = "GREATEST(similarity(r.village_code, %s), similarity(r.khasra_no, %s), " \
-                  "COALESCE((SELECT max(similarity(fv.current_value, %s)) FROM field_values fv " \
-                  "WHERE fv.record_id = r.id), 0))"
+            sim = ("GREATEST(similarity(r.village_code, %s), similarity(r.khasra_no, %s), "
+                   "COALESCE((SELECT max(similarity(fv.current_value, %s)) FROM field_values fv "
+                   "WHERE fv.record_id = r.id), 0))")
             sim_params = [term, term, term]
         else:
             sim = "0"
@@ -173,32 +181,47 @@ def list_records(
         sort_expr = SORTS[sort_by]
         if sort_expr == "_sim":
             sort_expr = "_sim DESC NULLS LAST"
-            order_sql = "" if order == "desc" else " ASC"
+            order_suffix = ""
         elif sort_expr == "_conf":
             # scored records first when DESC (best first); NULLs always last
             sort_expr = f"_conf {order_sql} NULLS LAST"
-            order_sql = ""
+            order_suffix = ""
+        else:
+            order_suffix = order_sql
 
+        # Slim list payload: the heavy candidates join only runs when
+        # confidence is actually used (sort_by=confidence); else NULL.
+        want_conf = "_conf" in sort_expr
+        conf_sql = conf if want_conf else "NULL"
         sql = f"""
-            SELECT r.*, {sim} AS _sim, {conf} AS _conf
+            SELECT r.*, {sim} AS _sim, {conf_sql} AS _conf
             FROM land_records r
             {where_sql}
-            ORDER BY {sort_expr} {order_sql}, r.id DESC
+            ORDER BY {sort_expr} {order_suffix}, r.id DESC
             LIMIT %s
         """.replace("{sim}", sim)  # keep it explicit; f-string nesting got messy
         all_params = sim_params + params + [limit]
+        t0 = time.perf_counter()
         rows = conn.execute(sql, all_params).fetchall()
-        out = []
-        for r in rows:
-            d = dict(r)
-            d.pop("_sim", None)
-            mc = d.pop("_conf", None)
-            d["confidence"] = {
-                "min_confidence": round(float(mc), 2) if mc is not None else None,
-                "band": ("high" if mc >= 0.85 else "medium" if mc >= 0.6 else "low") if mc is not None else "unknown",
-            }
-            out.append(d)
-        return out
+        query_ms = round((time.perf_counter() - t0) * 1000, 1)
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        d.pop("_sim", None)
+        mc = d.pop("_conf", None)
+        d["confidence"] = {
+            "min_confidence": round(float(mc), 2) if mc is not None else None,
+            "band": ("high" if mc >= 0.85 else "medium" if mc >= 0.6 else "low") if mc is not None else "unknown",
+        }
+        out.append(d)
+    _last_search_stats["ms"] = query_ms
+    return out
+
+
+# exposed via /records/_debug/search-stats for tuning (dev only, harmless)
+_last_search_stats: dict = {"ms": None}
+_has_trgm_cache: bool | None = None  # extension presence can't change mid-flight
 
 
 @router.get("/records/{record_id}")
