@@ -57,6 +57,54 @@ function humanDetail(d) {
   return Object.entries(d).map(([k, v]) => `${k}: ${v}`).join(' · ')
 }
 
+// Truth assurance (distinct from reading confidence): a composite verdict over
+// every checkable signal — rules, cross-record corroboration, integrity, human
+// authority — with the external registry honestly shown as an adapter slot.
+function VerifyPanel({ recordId }) {
+  const [v, setV] = useState(null)
+  const [error, setError] = useState(null)
+  const [busy, setBusy] = useState(false)
+
+  const run = () => {
+    setBusy(true); setError(null)
+    api(`/records/${recordId}/verify`).then(setV).catch((e) => setError(e.message)).finally(() => setBusy(false))
+  }
+
+  const bandClass = v?.verdict === 'SUFFICIENT' ? 'conf-high' : v?.verdict === 'PARTIAL' ? 'conf-medium' : 'conf-low'
+  return (
+    <div className="card">
+      <h2>Truth assurance</h2>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Not "how well did we read it" but "why should you believe it is correct" — every independently
+        checkable signal, cross-checked against the database. The AI's opinion is one input, never the verdict.
+      </p>
+      {!v && !error && <button className="btn" onClick={run} disabled={busy}>{busy ? 'Checking…' : 'Check assurance'}</button>}
+      {error && <><div className="error-box">{error}</div><button className="btn" onClick={run}>Retry</button></>}
+      {v && (
+        <>
+          <p style={{ margin: '6px 0' }}>
+            <span className={`chip ${bandClass}`} style={{ fontSize: 14 }}>{v.verdict}</span>
+            {'  '}<b>{v.assurance}%</b> <span className="muted">over checkable signals</span>
+          </p>
+          <p className="muted" style={{ marginTop: 2 }}>{v.verdict_meaning}</p>
+          <table style={{ marginTop: 8 }}>
+            <tbody>
+              {v.checks.map((ck, i) => (
+                <tr key={i}>
+                  <td><span className={`chip ${ck.status === 'pass' ? 'conf-high' : ck.status === 'warn' || ck.status === 'pending' ? 'conf-medium' : ck.status === 'fail' ? 'conf-low' : ''}`}>{ck.status}</span></td>
+                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{ck.check}</td>
+                  <td className="muted">{ck.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button className="btn btn-sm mt" onClick={run} disabled={busy}>Re-check</button>
+        </>
+      )}
+    </div>
+  )
+}
+
 function EvidenceDialog({ fieldId, onClose }) {
   const [chain, setChain] = useState(null)
   const [error, setError] = useState(null)
@@ -382,6 +430,8 @@ export default function RecordViewPage() {
           </>
         )}
       </div>
+
+      <VerifyPanel recordId={record.id} />
 
       <div className="card">
         <h2>Decision trail ({decisions.length})</h2>
