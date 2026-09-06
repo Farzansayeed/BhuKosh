@@ -12,6 +12,7 @@ from .errors import Problem, problem_handler, validation_handler
 from .extract.router import router as extract_router
 from .exports.router import router as exports_router
 from .evidence import router as evidence_router
+from .learning.router import router as learning_router
 from .processing.router import router as processing_router
 from .records.router import router as records_router
 from .rules.router import router as validation_router
@@ -32,6 +33,7 @@ app.include_router(audit_router)
 app.include_router(exports_router)
 app.include_router(evidence_router)
 app.include_router(stats_router)
+app.include_router(learning_router)
 
 
 @app.get("/health")

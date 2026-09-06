@@ -9,9 +9,10 @@ An evidence-and-validation layer for India's digitized land-record ecosystem:
 
 **Capabilities:** 12-field multilingual extraction (any Indic script, vision + text paths) with per-field
 confidence scoring; scanned-PDF support; per-field evidence crops (see the exact pixels each value was read
-from); five deterministic validation rules + cross-record anomaly detection; full claim/approve/reject/certify
-workflow with hash-chained audit trail; CSV/JSON exports with evidence manifests; role-based dashboards
-(PS #16: records processed, accuracy proxy, pending review, anomalies, district/village progress).
+from); five deterministic validation rules + cross-record anomaly detection with plain-language explanations;
+full claim/approve/reject/certify workflow with hash-chained audit trail; CSV/JSON exports with evidence
+manifests; role-based dashboards (PS #16); and a **learning loop** (PS #13): reviewer corrections become
+few-shot guidance injected into future extraction prompts — inspect live at `GET /learning/hints`.
 
 Full architecture: see the master plan (v4.1, frozen).
 

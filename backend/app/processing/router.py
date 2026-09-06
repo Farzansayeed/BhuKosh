@@ -20,6 +20,7 @@ from ..config import get_settings
 from ..db import conninfo
 from ..errors import Problem
 from ..extract import gemini_client, rate_limit
+from ..learning import service as learning_service
 from ..extract.schema import (
     ALL_FIELDS,
     CORE_FIELDS,
@@ -75,14 +76,19 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
     is_pdf = mime == "application/pdf"
     input_hash = storage.sha256_bytes(image_bytes)
 
+    # PS #13: reviewer corrections ride along as few-shot guidance.
+    hints = learning_service.build_hints_block()
+    hints_count = sum(1 for ln in hints.splitlines() if ln.startswith("- "))
+
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         run = conn.execute(
             """INSERT INTO processing_runs
                  (document_id, page_id, kind, engine_name, engine_version,
-                  prompt_id, prompt_version, input_hash, status)
-               VALUES (%s, %s, 'EXTRACT', 'gemini-vision', %s, %s, %s, %s, 'RUNNING')
+                  prompt_id, prompt_version, input_hash, status, config)
+               VALUES (%s, %s, 'EXTRACT', 'gemini-vision', %s, %s, %s, %s, 'RUNNING', %s)
                RETURNING *""",
-            (page["document_id"], page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION, input_hash),
+            (page["document_id"], page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION,
+             input_hash, Jsonb({"hints_count": hints_count})),
         ).fetchone()
         conn.commit()
 
@@ -93,8 +99,9 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
             **FIELD_CONFIDENCE_SCHEMA["properties"],
         }
         vision_schema = {"type": "OBJECT", "properties": combined}
+        prompt_text = f"{PROMPT}\n\n{VISION_ANNOTATE}" + (f"\n\n{hints}" if hints else "")
         raw = gemini_client.structured_extract_image(
-            image_bytes, mime, vision_schema, prompt=f"{PROMPT}\n\n{VISION_ANNOTATE}"
+            image_bytes, mime, vision_schema, prompt=prompt_text
         )
         fields = {f: raw.get(f) for f in FIELDS if raw.get(f) is not None or f in CORE_FIELDS}
         bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS if raw.get(f) is not None}
@@ -223,21 +230,23 @@ def extract_document(
     rate_limit.enforce(user["username"], route="/extraction")
 
     input_hash = storage.sha256_bytes(body.text.encode("utf-8"))
+    hints = learning_service.build_hints_block()
+    hints_count = sum(1 for ln in hints.splitlines() if ln.startswith("- "))
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         run = conn.execute(
             """INSERT INTO processing_runs
                  (document_id, page_id, kind, engine_name, engine_version,
-                  prompt_id, prompt_version, input_hash, status)
-               VALUES (%s, %s, 'EXTRACT', 'gemini', %s, %s, %s, %s, 'RUNNING')
+                  prompt_id, prompt_version, input_hash, status, config)
+               VALUES (%s, %s, 'EXTRACT', 'gemini', %s, %s, %s, %s, 'RUNNING', %s)
                RETURNING *""",
-            (doc_id, body.page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION, input_hash),
+            (doc_id, body.page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION,
+             input_hash, Jsonb({"hints_count": hints_count})),
         ).fetchone()
         conn.commit()
 
     try:
-        raw = gemini_client.structured_extract(
-            f"{PROMPT}\n\nRECORD TEXT:\n{body.text}", KHASRA_SCHEMA
-        )
+        prompt_text = f"{PROMPT}\n\nRECORD TEXT:\n{body.text}" + (f"\n\n{hints}" if hints else "")
+        raw = gemini_client.structured_extract(prompt_text, KHASRA_SCHEMA)
         raw_doc = {
             "run_id": run["id"],
             "model": s.gemini_model,
