@@ -3,9 +3,15 @@
 Intelligent Land Record Digitization & Validation System (Smart India Hackathon 2026, Ministry of Rural Development).
 
 An evidence-and-validation layer for India's digitized land-record ecosystem:
-**SOURCE → EVIDENCE → EXTRACTION → REASONING → VERIFICATION → PROVENANCE → TRUSTED OUTPUT**
+**SOURCE → EVIDENCE → LAYOUT → EXTRACTION → REASONING → VERIFICATION → PROVENANCE → TRUSTED OUTPUT**
 
 **Live:** app → https://bhukosh.vercel.app · API → https://bhukosh-api.vercel.app
+
+**Capabilities:** 12-field multilingual extraction (any Indic script, vision + text paths) with per-field
+confidence scoring; scanned-PDF support; per-field evidence crops (see the exact pixels each value was read
+from); five deterministic validation rules + cross-record anomaly detection; full claim/approve/reject/certify
+workflow with hash-chained audit trail; CSV/JSON exports with evidence manifests; role-based dashboards
+(PS #16: records processed, accuracy proxy, pending review, anomalies, district/village progress).
 
 Full architecture: see the master plan (v4.1, frozen).
 

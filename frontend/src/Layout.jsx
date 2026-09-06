@@ -17,6 +17,7 @@ export function Layout() {
     <div className="layout">
       <aside className="sidebar">
         <div className="brand">Bhu<span>Kosh</span></div>
+        <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Dashboard</NavLink>
         <NavLink to="/records" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Records</NavLink>
         <NavLink to="/upload" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Upload & Extract</NavLink>
         {isAuditor && (

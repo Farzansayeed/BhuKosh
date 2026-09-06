@@ -132,3 +132,33 @@ tr:hover td { background: var(--panel-2); }
   border-radius: 4px;
   margin: 6px 0;
 }
+
+/* --- dashboard (PS #16) --- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 12px 0 18px;
+}
+.stat-card { padding: 14px; }
+.stat-value { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.stat-label { margin-top: 4px; font-weight: 600; }
+.stat-sub { margin-top: 2px; font-size: 12px; opacity: 0.65; }
+.dash-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.bar-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.bar-label { flex: 0 0 140px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { flex: 1 1 auto; height: 10px; background: rgba(128,128,128,0.25); border-radius: 5px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; background: #3b82f6; border-radius: 5px; }
+.bar-n { flex: 0 0 auto; font-weight: 600; font-size: 13px; }
+.mini-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; }
+.chip { padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.sev-error { background: rgba(239,68,68,0.25); color: #ef4444; }
+.sev-warn { background: rgba(245,158,11,0.25); color: #f59e0b; }
+.sev-info { background: rgba(59,130,246,0.25); color: #3b82f6; }
+.sev-ok { background: rgba(34,197,94,0.25); color: #22c55e; }
+.error-card { border-color: #ef4444; color: #ef4444; }

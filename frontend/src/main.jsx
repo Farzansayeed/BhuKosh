@@ -8,6 +8,7 @@ import RecordsPage from './pages/Records'
 import RecordViewPage from './pages/RecordView'
 import UploadPage from './pages/Upload'
 import AuditPage from './pages/Audit'
+import DashboardPage from './pages/Dashboard'
 import './styles.css'
 
 const router = createBrowserRouter([
@@ -15,7 +16,7 @@ const router = createBrowserRouter([
   {
     element: <RequireAuth><Layout /></RequireAuth>,
     children: [
-      { path: '/', element: <RecordsPage /> },
+      { path: '/', element: <DashboardPage /> },
       { path: '/records', element: <RecordsPage /> },
       { path: '/records/:id', element: <RecordViewPage /> },
       { path: '/upload', element: <UploadPage /> },

@@ -15,6 +15,7 @@ from .evidence import router as evidence_router
 from .processing.router import router as processing_router
 from .records.router import router as records_router
 from .rules.router import router as validation_router
+from .stats.router import router as stats_router
 
 settings = get_settings()
 
@@ -30,6 +31,7 @@ app.include_router(validation_router)
 app.include_router(audit_router)
 app.include_router(exports_router)
 app.include_router(evidence_router)
+app.include_router(stats_router)
 
 
 @app.get("/health")
