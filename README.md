@@ -66,4 +66,18 @@ gitignored — never commit real credentials.
 - [x] AUDIT — hash-chained audit_events (trigger-enforced append-only), emitted in the decision transaction, /audit/events + chain-head + verify
 - [x] EXPORTS — immutable JSON/CSV snapshots with evidence manifest (document hashes, rulebook version, decision trail), trigger-enforced
 - [x] DATA MODEL COMPLETE — all 14 core tables of plan §5
-- [ ] REMAINING: review-queue ranking, evidence-replay endpoints, UI, evaluation, demo
+- [x] EVIDENCE REPLAY — GET /fields/{id}/replay: every displayed value one click from its full provenance chain (candidate → run → document → page)
+- [x] WEB UI — React/Vite workspace: login (RBAC-aware), records list, record view with per-field evidence chain + corrections + decisions, upload-to-record pipeline, audit viewer, JSON/CSV export download (Hindi/English labels)
+- [ ] REMAINING: review-queue ranking, evaluation harness, demo kit (seed data, offline mode, PWA install, video)
+
+## Frontend (dev)
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173 — proxies /api to the backend on :8000
+npm run build      # production bundle in dist/
+```
+
+Login with any seeded dev user. The UI adapts to the JWT's role: checkers see claim/release/
+reject/correct, certifiers additionally see Certify, auditors/admins see the Audit page.
