@@ -6,8 +6,10 @@ BhuKosh turns scans of handwritten land registers — in any Indian script — i
 Every value the AI extracts stays bound to its evidence: click any field to see the exact pixels it was read
 from, the engine run that produced it, and the human decisions behind it, all on a tamper-evident audit chain.
 Business rules catch impossible data — area jumps, missing owners, unreadable fields — before a human ever
-reviews, and every human correction teaches the extractor not to repeat the mistake. To see it in 60 seconds:
-log in at the app link below as `checker` / `checker-dev`, open a pending record, and click **Evidence**.
+reviews, and every human correction teaches the extractor not to repeat the mistake. And it never asks you
+to trust the AI: every record carries a **truth-assurance verdict** computed from independently checkable
+signals — not from the model's opinion. To see it in 60 seconds: log in at the app link below as
+`checker` / `checker-dev`, open a pending record, and click **Evidence** — then **Check assurance**.
 
 **Live:** app → https://bhukosh.vercel.app · API → https://bhukosh-api.vercel.app · API docs (OpenAPI) → https://bhukosh-api.vercel.app/docs
 
@@ -24,17 +26,24 @@ care about: **can you trust it, and can you prove it?**
 2. **Validation before humans.** Five deterministic, versioned business rules run on every record; only
    anomalies (with plain-language explanations) reach a reviewer. Uncertain fields (engine-reported confidence
    < 0.6, or unreadable) route the record to review automatically — they never enter the database silently.
-3. **Tamper-evident provenance.** The audit trail is a hash chain enforced by database triggers — rows cannot
+3. **Two scores, honestly separated.** *Reading confidence* (per field, and document-level as the worst field,
+   color-banded) answers "did we read the pixels right?" **Truth assurance** (`GET /records/{id}/verify`)
+   answers the harder question — "why believe it's *correct*?" — with a SUFFICIENT / PARTIAL / INSUFFICIENT
+   verdict computed from independently checkable signals: rule outcomes, cross-record corroboration (other
+   records for the same village+khasra agreeing on area), document integrity, and human authority. A
+   VERIFIED record can still fail honestly when evidence contradicts it; the external LRMS/DILRMP cross-check
+   is an explicit adapter slot, never faked.
+4. **Tamper-evident provenance.** The audit trail is a hash chain enforced by database triggers — rows cannot
    be edited or deleted, and `/audit/verify` re-checks the whole chain. Exports are immutable snapshots with
    an evidence manifest (document hashes, rulebook version, full decision trail).
-4. **A real workflow, not a form.** Claim locks (HTTP 423), optimistic versioning (HTTP 409), mandatory
+5. **A real workflow, not a form.** Claim locks (HTTP 423), optimistic versioning (HTTP 409), mandatory
    reasons for rejections/corrections/reopens, and one audited write path for every human decision.
-5. **It learns from its reviewers.** Human corrections are injected as few-shot guidance into future
+6. **It learns from its reviewers.** Human corrections are injected as few-shot guidance into future
    extraction prompts — and the loop is inspectable at `GET /learning/hints` (see the exact lessons the
    engine currently carries, and the decision trail behind each one).
-6. **Multilingual from day one.** Verified live on Devanagari (UP khatauni registers) and Gujarati (VF-6
+7. **Multilingual from day one.** Verified live on Devanagari (UP khatauni registers) and Gujarati (VF-6
    inheritance forms); the extraction schema is script-agnostic by design.
-7. **Runs anywhere.** Identical code against a local offline Postgres (courts/tahsils with no internet) or
+8. **Runs anywhere.** Identical code against a local offline Postgres (courts/tahsils with no internet) or
    a cloud deployment (Supabase + Vercel) — selected by one environment variable.
 
 ## How it works — the pipeline
@@ -103,6 +112,9 @@ append-only audit trail around every decision. The stage-by-stage detail:
 - Two paths: **vision** (the stored scan itself is the engine input — images and scanned PDFs) and **text**
   (pasted register lines, fast path)
 - Schema-locked structured output; per-field **confidence 0–1**; core field < 0.6 or unreadable → review
+- **Document-level confidence** on every record: the *worst* field score (a record is as trustworthy as its
+  weakest reading), color-banded ≥85 / ≥60 / <60 in the records list and record header; human-corrected
+  fields drop out; records without scores show honestly empty
 - Prompt versions are a ledger: every run records the exact prompt version that produced it
 
 **Validation & anomalies**
@@ -111,6 +123,10 @@ append-only audit trail around every decision. The stage-by-stage detail:
   the same village + khasra — catches misreads and flags suspicious mutations)
 - Anomaly explanations are plain language with linked evidence records; open errors hold the record at review;
   stale findings auto-resolve on re-validation (audited)
+- **Truth assurance** (`GET /records/{id}/verify`): composite SUFFICIENT / PARTIAL / INSUFFICIENT verdict over
+  every checkable signal — business rules, cross-record corroboration against the database (same village +
+  khasra must agree on area), document integrity, human authority — with per-check detail lines; the
+  external-registry cross-check renders as an honest "adapter slot" rather than a fake lookup
 
 **Human review workflow**
 - States: `INGESTED → EXTRACTED → VALIDATED → REVIEW_REQUIRED → VERIFIED → OFFICER_CERTIFIED → ARCHIVED`,
@@ -156,7 +172,7 @@ All endpoints are JWT-authenticated except `/health`. Interactive docs: `/docs` 
 | Custody (source of truth for scans) | `POST /intake` · `GET /intake/{id}` · `POST /documents` · `GET /documents/{id}` · `POST /documents/{id}/pages` · `GET /documents/{id}/content` |
 | Extraction | `POST /extract` (text prototype) · `POST /documents/{id}/extract` (evidence-bound text) · `POST /pages/{id}/extract-image` (vision: images + PDFs) · `GET /extraction/runs/{id}` · `GET /documents/{id}/runs` |
 | Evidence | `GET /fields/{id}/replay` · `GET /crops/{id}/image` |
-| Records & workflow | `GET /records` · `GET /records/{id}` · `POST /records/from-run/{id}` · `POST /records/{id}/claim` · `POST /records/{id}/release` · `POST /records/{id}/decisions` (approve/reject/certify/reopen/correct) · `POST /records/{id}/validate` · `GET /records/{id}/validation` |
+| Records & workflow | `GET /records` · `GET /records/{id}` · `POST /records/from-run/{id}` · `POST /records/{id}/claim` · `POST /records/{id}/release` · `POST /records/{id}/decisions` (approve/reject/certify/reopen/correct) · `POST /records/{id}/validate` · `GET /records/{id}/validation` · `GET /records/{id}/verify` (truth assurance) |
 | Anomalies | `GET /anomalies` · `GET /anomalies/{id}` · `POST /anomalies/{id}/resolve` |
 | Audit | `GET /audit/events` · `GET /audit/chain-head` · `GET /audit/verify` |
 | Exports | `POST /records/{id}/exports` · `GET /exports` · `GET /exports/{id}/download` |
@@ -292,6 +308,7 @@ are PROVENANCE/TRUSTED OUTPUT — so the codebase reads the same way the pitch d
 
 ## Roadmap
 
-Review-queue ranking (priority by anomaly severity + confidence) · evaluation harness with labeled
-benchmark sets · PWA install for field tablets · multi-page register batch intake · direct LRMS/DILRMP +
-GIS adapters · fine-tuning on accumulated correction pairs · GIS overlay for khasra maps.
+Review-queue ranking (priority by anomaly severity + confidence) · confidence calibration (observed
+correction rates per band, validating the engine's self-report against real outcomes) · evaluation harness
+with labeled benchmark sets · PWA install for field tablets · multi-page register batch intake · direct
+LRMS/DILRMP + GIS adapters · fine-tuning on accumulated correction pairs · GIS overlay for khasra maps.
