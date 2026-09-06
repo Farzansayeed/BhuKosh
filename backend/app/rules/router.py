@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
-from ..auth.dependencies import get_current_user, require_roles
+from ..auth.dependencies import get_current_user
+from ..auth.permissions import require_permission
 from ..db import conninfo
 from ..errors import Problem
 from ..records.service import apply_decision
@@ -25,7 +26,7 @@ class ResolveIn(BaseModel):
 
 
 @router.post("/records/{record_id}/validate")
-def validate(record_id: int, user: dict = Depends(require_roles(*WRITE_ROLES))) -> dict:
+def validate(record_id: int, user: dict = Depends(require_permission("rules:validate"))) -> dict:
     return service.run_validation(record_id)
 
 
@@ -68,7 +69,7 @@ def get_anomaly(anomaly_id: int, user: dict = Depends(get_current_user)) -> dict
 
 
 @router.post("/anomalies/{anomaly_id}/resolve")
-def resolve_anomaly(anomaly_id: int, body: ResolveIn, user: dict = Depends(require_roles("checker", "certifier", "admin"))) -> dict:
+def resolve_anomaly(anomaly_id: int, body: ResolveIn, user: dict = Depends(require_permission("records:decide"))) -> dict:
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         anomaly = conn.execute(
             "SELECT record_id FROM anomalies WHERE id = %s", (anomaly_id,)

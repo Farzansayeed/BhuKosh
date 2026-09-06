@@ -145,19 +145,31 @@ append-only audit trail around every decision. The stage-by-stage detail:
   open anomalies by rule, engine run stats (counts, avg duration), district/village progress
 - Immutable JSON/CSV exports with evidence manifests; OpenAPI schema for government integrations
 
-## Roles (RBAC)
+## Roles & permissions (RBAC)
 
-Every endpoint is role-gated on a JWT; the UI adapts to the token's role.
+Every endpoint is gated on a JWT plus a **live permission matrix** — a `role_permissions` table the
+admin can edit at runtime from the Admin console (no redeploy). The seeded matrix matches the classic
+five-role model below; toggles take effect within seconds and every change is audited.
 
 | Capability | operator | checker | certifier | auditor | admin |
 |---|:-:|:-:|:-:|:-:|:-:|
 | Intake, upload, page registration | ✓ | ✓ | ✓ | | ✓ |
 | Extraction (text + vision) | ✓ | ✓ | ✓ | | ✓ |
 | Project run → record, validate | ✓ | ✓ | ✓ | | ✓ |
-| Claim / release / approve / reject / correct / reopen / resolve anomalies | | ✓ | ✓ | | ✓ |
+| Claim / release / approve / reject / correct / resolve anomalies | | ✓ | ✓ | | ✓ |
+| Reopen REJECTED records | | ✓ | ✓ | | ✓ |
+| **Reopen VERIFIED / OFFICER_CERTIFIED records** | | | | | **admin only** |
 | CERTIFY (final officer sign-off) | | | ✓ | | ✓ |
 | Read records, evidence, audit chain, dashboards, exports | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Download exports | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Create users · reset any password · change roles · (de)activate accounts | | | | | ✓ |
+| Edit the permission matrix · force-release stuck claims | | | | | ✓ |
+
+**Admin governance** (`/admin/*`, all audited): user CRUD with scrypt-hashed password resets,
+role changes (self-demotion blocked), account (de)activation, per-role permission toggles with an
+overlap hint (granting a permission another role already holds tells you *which*), and
+force-release of stuck review claims. Admin always retains every permission — the platform's
+last-resort authority cannot lock itself out.
 
 Seeded dev users (demo — see caveats): `admin/bhukosh-admin`, `operator/operator-dev`,
 `checker/checker-dev`, `certifier/certifier-dev`, `auditor/auditor-dev`.
@@ -175,6 +187,7 @@ All endpoints are JWT-authenticated except `/health`. Interactive docs: `/docs` 
 | Records & workflow | `GET /records` · `GET /records/{id}` · `POST /records/from-run/{id}` · `POST /records/{id}/claim` · `POST /records/{id}/release` · `POST /records/{id}/decisions` (approve/reject/certify/reopen/correct) · `POST /records/{id}/validate` · `GET /records/{id}/validation` · `GET /records/{id}/verify` (truth assurance) |
 | Anomalies | `GET /anomalies` · `GET /anomalies/{id}` · `POST /anomalies/{id}/resolve` |
 | Audit | `GET /audit/events` · `GET /audit/chain-head` · `GET /audit/verify` |
+| Admin | `GET/POST /admin/users` · `POST /admin/users/{u}/password` · `POST /admin/users/{u}/role` · `POST /admin/users/{u}/active` · `GET /admin/permissions` · `GET /admin/permissions/{p}/overlap` · `POST /admin/permissions/{role}/{p}` · `POST /admin/records/{id}/force-release` |
 | Exports | `POST /records/{id}/exports` · `GET /exports` · `GET /exports/{id}/download` |
 | Insights | `GET /stats` · `GET /learning/hints` |
 | Ops | `GET /health` |

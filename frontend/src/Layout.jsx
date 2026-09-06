@@ -23,6 +23,9 @@ export function Layout() {
         {isAuditor && (
           <NavLink to="/audit" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Audit Chain</NavLink>
         )}
+        {role === 'admin' && (
+          <NavLink to="/admin" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Admin</NavLink>
+        )}
         <div className="spacer" />
         <div className="user-box">
           {me ? <>signed in as<br /><b>{me.username}</b><br /><span className="role-chip">{role}</span></> : '…'}

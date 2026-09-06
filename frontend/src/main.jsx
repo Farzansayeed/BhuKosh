@@ -9,6 +9,7 @@ import RecordViewPage from './pages/RecordView'
 import UploadPage from './pages/Upload'
 import AuditPage from './pages/Audit'
 import DashboardPage from './pages/Dashboard'
+import AdminPage from './pages/Admin'
 import './styles.css'
 
 const router = createBrowserRouter([
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
       { path: '/records/:id', element: <RecordViewPage /> },
       { path: '/upload', element: <UploadPage /> },
       { path: '/audit', element: <AuditPage /> },
+      { path: '/admin', element: <AdminPage /> },
     ],
   },
 ])

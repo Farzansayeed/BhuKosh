@@ -14,7 +14,8 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
 from .. import storage
-from ..auth.dependencies import get_current_user, require_roles
+from ..auth.dependencies import get_current_user
+from ..auth.permissions import require_permission
 from ..config import get_settings
 from ..db import conninfo
 from ..errors import Problem
@@ -61,7 +62,7 @@ def _manifest_hash(body: ManifestIn) -> str:
 
 
 @router.post("/intake", status_code=201)
-def create_manifest(body: ManifestIn, user: dict = Depends(require_roles(*WRITE_ROLES))) -> dict:
+def create_manifest(body: ManifestIn, user: dict = Depends(require_permission("documents:write"))) -> dict:
     """Signed intake manifest: ordered page hashes + hash-of-hashes (plan §2 step 1)."""
     if body.page_hashes and len(body.page_hashes) != body.expected_count:
         raise Problem(422, "Validation Failed", "page_hashes length must equal expected_count.")
@@ -99,7 +100,7 @@ def get_manifest(manifest_id: int, user: dict = Depends(get_current_user)) -> di
 async def upload_document(
     manifest_id: int = Form(...),
     file: UploadFile = File(...),
-    user: dict = Depends(require_roles(*WRITE_ROLES)),
+    user: dict = Depends(require_permission("documents:write")),
 ) -> dict:
     """Idempotent upload: byte-identical re-upload → 409 with the existing id (plan §2 step 2)."""
     s = get_settings()
@@ -149,7 +150,7 @@ class PageIn(BaseModel):
 
 
 @router.post("/documents/{doc_id}/pages", status_code=201)
-def register_page(doc_id: int, body: PageIn, user: dict = Depends(require_roles(*WRITE_ROLES))) -> dict:
+def register_page(doc_id: int, body: PageIn, user: dict = Depends(require_permission("documents:write"))) -> dict:
     """Register a page against its document; verifies against the intake manifest.
 
     Pages beyond the declared count are accepted (up to a bounded overshoot) and

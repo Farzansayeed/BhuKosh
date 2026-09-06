@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, Query
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
 
-from ..auth.dependencies import get_current_user, require_roles
+from ..auth.dependencies import get_current_user
+from ..auth.permissions import require_permission
 from ..db import conninfo
 from ..errors import Problem
 from . import service
@@ -78,7 +79,7 @@ def _record_bundle(record_id: int) -> dict:
 
 
 @router.post("/records/from-run/{run_id}", status_code=201)
-def create_record_from_run(run_id: int, user: dict = Depends(require_roles(*PROJECTION_ROLES))) -> dict:
+def create_record_from_run(run_id: int, user: dict = Depends(require_permission("records:project"))) -> dict:
     """Project a succeeded EXTRACT run into a record (one projection per run)."""
     return service.create_from_run(run_id)
 
@@ -136,18 +137,18 @@ def record_documents(record_id: int, user: dict = Depends(get_current_user)) -> 
 
 
 @router.post("/records/{record_id}/claim")
-def claim_record(record_id: int, user: dict = Depends(require_roles(*DECIDE_ROLES))) -> dict:
+def claim_record(record_id: int, user: dict = Depends(require_permission("records:claim"))) -> dict:
     return service.claim(record_id, user)
 
 
 @router.post("/records/{record_id}/release")
-def release_record(record_id: int, user: dict = Depends(require_roles(*DECIDE_ROLES))) -> dict:
+def release_record(record_id: int, user: dict = Depends(require_permission("records:claim"))) -> dict:
     return service.release(record_id, user)
 
 
 @router.post("/records/{record_id}/decisions")
 def decide(
-    record_id: int, body: DecisionIn, user: dict = Depends(require_roles(*DECIDE_ROLES))
+    record_id: int, body: DecisionIn, user: dict = Depends(require_permission("records:decide"))
 ) -> dict:
     payload = body.model_dump()
     result = service.apply_decision(user, record_id, payload)

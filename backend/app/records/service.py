@@ -14,6 +14,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from ..audit import service as audit_service
+from ..auth.permissions import role_can
 from ..db import conninfo
 from ..errors import Problem
 
@@ -50,6 +51,11 @@ DECISIONS: dict[str, tuple[tuple[str, ...], str, tuple[str, ...], bool]] = {
     "CERTIFY":   (("VERIFIED",), "OFFICER_CERTIFIED", CERTIFY_ROLES, False),
     "REOPEN":    (("VERIFIED", "OFFICER_CERTIFIED", "REJECTED"), "REVIEW_REQUIRED", DECIDE_ROLES, True),
 }
+
+# REOPEN of a FINALIZED record (VERIFIED / OFFICER_CERTIFIED) re-opens a
+# decision a certifier already made — that authority belongs to the admin
+# alone. REJECTED records may be reopened by any deciding role.
+REOPEN_ADMIN_ONLY_FROM = ("VERIFIED", "OFFICER_CERTIFIED")
 
 
 def _claim_active(rec: dict) -> bool:
@@ -167,8 +173,13 @@ def apply_decision(user: dict, record_id: int, payload: dict) -> dict:
                       f"decision_type must be one of "
                       f"{sorted(list(DECISIONS) + ['CORRECTION', 'ANOMALY_RESOLVE'])}.")
     from_states, target, roles, reason_required = spec
-    if user["role"] not in roles:
-        raise Problem(403, "Forbidden", f"Role '{user['role']}' cannot perform {dtype}.")
+    # Permission-aware RBAC (dynamic matrix, 009_admin): approve/reject reach
+    # here through the router's records:decide gate; certify and reopen check
+    # their own permission so admins can tune them independently.
+    if dtype == "CERTIFY" and not role_can(user["role"], "records:certify"):
+        raise Problem(403, "Forbidden", f"Role '{user['role']}' lacks permission 'records:certify'.")
+    if dtype == "REOPEN" and not role_can(user["role"], "records:reopen"):
+        raise Problem(403, "Forbidden", f"Role '{user['role']}' lacks permission 'records:reopen'.")
     reason = (payload.get("reason") or "").strip()
     if reason_required and not reason:
         raise Problem(422, "Validation Failed", f"{dtype} requires a reason.")
@@ -194,6 +205,13 @@ def apply_decision(user: dict, record_id: int, payload: dict) -> dict:
                 422, "Validation Failed",
                 f"{dtype} not allowed from {rec['current_state']} "
                 f"(allowed from: {', '.join(from_states)}).",
+            )
+        if dtype == "REOPEN" and rec["current_state"] in REOPEN_ADMIN_ONLY_FROM \
+                and user["role"] != "admin":
+            raise Problem(
+                403, "Forbidden",
+                f"Reopening a {rec['current_state']} record requires an admin — "
+                f"a finalized decision can only be re-opened by the highest authority.",
             )
 
         if dtype == "APPROVE":
@@ -237,7 +255,7 @@ def apply_decision(user: dict, record_id: int, payload: dict) -> dict:
 def _apply_anomaly_resolution(user: dict, record_id: int, payload: dict) -> dict:
     """Resolve an OPEN anomaly on this record — no state change, version bumps,
     reason mandatory (plan §5 table 12: RESOLVE requires reason)."""
-    if user["role"] not in DECIDE_ROLES:
+    if not role_can(user["role"], "records:decide"):
         raise Problem(403, "Forbidden", f"Role '{user['role']}' cannot resolve anomalies.")
     reason = (payload.get("reason") or "").strip()
     if not reason:
@@ -300,7 +318,7 @@ def _apply_anomaly_resolution(user: dict, record_id: int, payload: dict) -> dict
 
 
 def _apply_correction(user: dict, record_id: int, payload: dict) -> dict:
-    if user["role"] not in DECIDE_ROLES:
+    if not role_can(user["role"], "records:decide"):
         raise Problem(403, "Forbidden", f"Role '{user['role']}' cannot correct fields.")
     new_value = payload.get("after_value")
     if not isinstance(new_value, str) or not new_value.strip():

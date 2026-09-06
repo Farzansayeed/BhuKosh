@@ -167,3 +167,7 @@ tr:hover td { background: var(--panel-2); }
 .conf-high { background: rgba(34,197,94,0.22); color: #22c55e; }
 .conf-medium { background: rgba(245,158,11,0.22); color: #f59e0b; }
 .conf-low { background: rgba(239,68,68,0.22); color: #ef4444; }
+
+/* Admin console */
+.chip-ok { background: rgba(34,197,94,0.2); color: #22c55e; cursor: pointer; border: none; }
+.chip-off { background: rgba(100,116,139,0.15); color: #64748b; cursor: pointer; border: none; }

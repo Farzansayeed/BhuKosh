@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 
 from .. import storage
 from . import crops as crops_svc
-from ..auth.dependencies import get_current_user, require_roles
+from ..auth.dependencies import get_current_user
+from ..auth.permissions import require_permission
 from ..config import get_settings
 from ..db import conninfo
 from ..errors import Problem
@@ -45,7 +46,7 @@ class ExtractIn(BaseModel):
 
 
 @router.post("/pages/{page_id}/extract-image", status_code=201)
-def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_ROLES))) -> dict:
+def extract_page_image(page_id: int, user: dict = Depends(require_permission("extract:run"))) -> dict:
     """Vision extraction: the stored page bytes ARE the engine input (evidence-bound).
 
     Input hash = SHA-256 of the exact scan bytes sent to the model, so the run
@@ -216,7 +217,7 @@ def get_crop_image(crop_id: int, user: dict = Depends(get_current_user)) -> obje
 
 @router.post("/documents/{doc_id}/extract", status_code=201)
 def extract_document(
-    doc_id: int, body: ExtractIn, user: dict = Depends(require_roles(*WRITE_ROLES))
+    doc_id: int, body: ExtractIn, user: dict = Depends(require_permission("extract:run"))
 ) -> dict:
     s = get_settings()
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:

@@ -10,7 +10,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from ..auth.dependencies import require_roles
+from ..auth.permissions import require_permission
 from ..config import get_settings
 from ..db import conninfo
 from . import gemini_client, rate_limit
@@ -30,7 +30,7 @@ class ExtractIn(BaseModel):
 @router.post("")
 def extract(
     body: ExtractIn,
-    user: dict = Depends(require_roles("operator", "checker", "certifier", "admin")),
+    user: dict = Depends(require_permission("extract:run")),
 ) -> dict:
     rate_limit.enforce(user["username"], route=RATE_ROUTE)
 

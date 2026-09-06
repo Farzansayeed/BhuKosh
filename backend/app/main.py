@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 
 from .audit.router import router as audit_router
+from .admin import router as admin_router
 from .auth.router import router as auth_router
 from .config import get_settings
 from .custody.router import router as custody_router
@@ -36,6 +37,7 @@ app.include_router(evidence_router)
 app.include_router(stats_router)
 app.include_router(learning_router)
 app.include_router(verification_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

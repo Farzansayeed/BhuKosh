@@ -15,7 +15,8 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import storage
-from ..auth.dependencies import get_current_user, require_roles
+from ..auth.dependencies import get_current_user
+from ..auth.permissions import require_permission
 from ..db import conninfo
 from ..errors import Problem
 from ..rules.registry import REGISTRY_VERSION
@@ -111,7 +112,7 @@ def _to_csv(bundle: dict) -> bytes:
 
 
 @router.post("/records/{record_id}/exports", status_code=201)
-def create_export(record_id: int, body: ExportIn, user: dict = Depends(require_roles(*WRITE_ROLES))) -> dict:
+def create_export(record_id: int, body: ExportIn, user: dict = Depends(require_permission("exports:create"))) -> dict:
     bundle = _bundle(record_id)
     manifest = {
         "record_id": record_id,

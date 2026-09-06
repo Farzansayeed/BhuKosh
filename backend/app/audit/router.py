@@ -3,7 +3,8 @@ import psycopg
 from fastapi import APIRouter, Depends, Query
 from psycopg.rows import dict_row
 
-from ..auth.dependencies import get_current_user, require_roles
+from ..auth.dependencies import get_current_user
+from ..auth.permissions import require_permission
 from ..db import conninfo
 from . import service
 
@@ -16,7 +17,7 @@ AUDIT_ROLES = ("admin", "auditor")
 def list_events(
     after_seq: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=1000),
-    user: dict = Depends(require_roles(*AUDIT_ROLES)),
+    user: dict = Depends(require_permission("audit:read")),
 ) -> list[dict]:
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         rows = conn.execute(
@@ -27,10 +28,10 @@ def list_events(
 
 
 @router.get("/chain-head")
-def head(user: dict = Depends(require_roles(*AUDIT_ROLES))) -> dict:
+def head(user: dict = Depends(require_permission("audit:read"))) -> dict:
     return service.chain_head() or {"seq": None, "payload_hash": None}
 
 
 @router.post("/verify")
-def verify(user: dict = Depends(require_roles(*AUDIT_ROLES))) -> dict:
+def verify(user: dict = Depends(require_permission("audit:read"))) -> dict:
     return service.verify()
