@@ -14,6 +14,7 @@ from .extract.router import router as extract_router
 from .exports.router import router as exports_router
 from .evidence import router as evidence_router
 from .integrity import router as integrity_router
+from .i18n_output import router as i18n_output_router
 from .learning.router import router as learning_router
 from .processing.router import router as processing_router
 from .records.router import router as records_router
@@ -36,6 +37,7 @@ app.include_router(audit_router)
 app.include_router(exports_router)
 app.include_router(evidence_router)
 app.include_router(integrity_router)
+app.include_router(i18n_output_router)
 app.include_router(stats_router)
 app.include_router(learning_router)
 app.include_router(verification_router)

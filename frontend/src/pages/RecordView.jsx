@@ -10,6 +10,16 @@ import IntegrityPanel from '../IntegrityPanel'
 import { useAuth } from '../auth'
 import { useI18n } from '../i18n'
 
+// Field value in the operator's UI language when a rendering exists — the
+// original (evidence) value stays primary; the translation renders beneath it.
+function FieldValue({ field }) {
+  const { lang } = useI18n()
+  const tr = field.translations
+  const rendered = tr && lang !== 'en' ? tr[lang] : null
+  if (!rendered || rendered === field.current_value) return null
+  return <div className="fv-translation">{rendered}</div>
+}
+
 // Anomaly explanations arrive as structured JSON from the rules engine.
 // Render them as plain language: a summary sentence, labeled evidence with
 // links, and the raw JSON only as a collapsible last resort. Older anomalies
@@ -400,6 +410,7 @@ export default function RecordViewPage() {
                 <div className={`fv-value${f.current_value == null ? ' unknown' : ''}`}>
                   {f.current_value ?? t('unknown')}
                 </div>
+                <FieldValue field={f} />
                 <div className="row" style={{ gap: 6 }}>
                   <button className="btn btn-sm" onClick={() => setEvidenceFor(f.id)}>{t('evidence')}</button>
                   <FieldEditor field={f} record={record} onDone={load} />

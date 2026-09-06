@@ -137,6 +137,11 @@ tr:hover td { background: var(--panel-2); }
 .value-card .fv-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
 .value-card .fv-value { font-size: 17px; margin: 4px 0 8px; word-break: break-word; }
 .value-card .unknown { color: var(--warn); font-style: italic; }
+/* per-language rendering of the extracted value (translations feature) */
+.fv-translation {
+  font-size: 13px; color: var(--muted); margin: -2px 0 8px;
+  border-top: 1px dashed var(--border); padding-top: 4px;
+}
 
 .crop-img {
   display: block;

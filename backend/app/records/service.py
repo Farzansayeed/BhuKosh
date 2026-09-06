@@ -365,7 +365,8 @@ def _apply_correction(user: dict, record_id: int, payload: dict) -> dict:
         ).fetchone()
         conn.execute(
             """UPDATE field_values
-               SET current_value = %s, state = 'CORRECTED', updated_by_decision = %s
+               SET current_value = %s, state = 'CORRECTED', updated_by_decision = %s,
+                   translations = NULL
                WHERE id = %s""",
             (new_value.strip(), decision["id"], field_id),
         )

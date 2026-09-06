@@ -66,7 +66,9 @@ def _record_bundle(record_id: int) -> dict:
         if not rec:
             raise Problem(404, "Not Found", "No such record.")
         fields = conn.execute(
-            "SELECT * FROM field_values WHERE record_id = %s ORDER BY id", (record_id,)
+            "SELECT id, field_type, current_value, raw_value, state, selected_candidate_id, "
+            "occurrence, updated_by_decision, translations "
+            "FROM field_values WHERE record_id = %s ORDER BY id", (record_id,)
         ).fetchall()
         decisions = conn.execute(
             "SELECT * FROM human_decisions WHERE record_id = %s ORDER BY id", (record_id,)
