@@ -38,6 +38,9 @@ Dev users (seeded by `scripts/seed_users.py`): `admin/bhukosh-admin`, `operator/
 
 Tests: `cd backend && .venv/Scripts/python -m pytest -q`
 
+Demo data (8 records across pipeline states, incl. an area-jump anomaly pair — works
+against local or the production API): `cd backend && .venv/Scripts/python -m scripts.seed_demo [BASE_URL]`
+
 ## AI extraction (prototype slice)
 
 `POST /extract` — JWT-authenticated (roles: operator/checker/certifier/admin). Send `{"text": "<register line>"}`;
