@@ -140,6 +140,61 @@ tr:hover td { background: var(--panel-2); }
   margin: 6px 0;
 }
 
+/* --- record page: fields left, source document pinned right --- */
+.record-cols {
+  display: grid; grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px; align-items: start;
+}
+.record-main { min-width: 0; }
+.record-aside {
+  position: sticky; top: 16px;
+  max-height: calc(100vh - 32px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px;
+}
+.record-aside h2 { margin-top: 0; }
+.value-card { cursor: pointer; }
+.value-card.field-active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.35); }
+
+/* document viewer internals */
+.dv-canvas {
+  max-height: 460px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+}
+.dv-frame { position: relative; width: fit-content; margin: 0 auto; }
+.dv-img { display: block; max-width: 100%; max-height: 640px; width: auto; height: auto; }
+.dv-box {
+  position: absolute; border: 2px solid #ffd24d; border-radius: 3px;
+  background: rgba(255, 210, 77, 0.12); cursor: pointer;
+  min-width: 8px; min-height: 8px;
+}
+.dv-box:hover { background: rgba(255, 210, 77, 0.3); }
+.dv-box.active {
+  border-color: var(--accent); background: rgba(79, 140, 255, 0.22);
+  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.4);
+}
+.dv-tag {
+  position: absolute; top: -15px; left: -2px;
+  font-size: 9px; line-height: 1.4; font-weight: 600; text-transform: uppercase;
+  background: #ffd24d; color: #1a1a1a; padding: 0 5px; border-radius: 3px;
+  white-space: nowrap; pointer-events: none;
+}
+.dv-box.active .dv-tag { background: var(--accent); color: #fff; }
+
+/* viewer fullscreen mode */
+.dv-fullscreen {
+  position: fixed; inset: 0; z-index: 60; background: rgba(6, 8, 12, 0.97);
+  display: flex; flex-direction: column; padding: 12px;
+}
+.dv-fullscreen-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.dv-fullscreen .dv-canvas { flex: 1; max-height: none; }
+.dv-img-full { max-height: calc(100vh - 64px); max-width: 100%; }
+
+@media (max-width: 1100px) {
+  .record-cols { grid-template-columns: 1fr; }
+  .record-aside { position: static; max-height: none; }
+}
+
 /* --- dashboard (PS #16) --- */
 .stat-grid {
   display: grid;

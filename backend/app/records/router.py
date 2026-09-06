@@ -72,9 +72,39 @@ def _record_bundle(record_id: int) -> dict:
             "SELECT * FROM human_decisions WHERE record_id = %s ORDER BY id", (record_id,)
         ).fetchall()
         confidence = _confidence_summary(record_id, conn)
+        # Pixel evidence for the document viewer: WHERE on the scan each value
+        # was physically read from. crop bbox is absolute page pixels (the
+        # browser scales it by naturalWidth/Height), plus which document/page.
+        ev_rows = conn.execute(
+            """SELECT fv.id AS field_id, ec.bbox AS bbox_px, pr.document_id AS doc_id,
+                      p.id AS page_id, p.seq_no AS page_seq
+                 FROM field_values fv
+                 JOIN candidates c ON c.id = fv.selected_candidate_id
+                 JOIN processing_runs pr ON pr.id = c.run_id
+                 LEFT JOIN evidence_crops ec ON ec.id = c.crop_id
+                 LEFT JOIN pages p ON p.id = pr.page_id
+                WHERE fv.record_id = %s""",
+            (record_id,),
+        ).fetchall()
+        ev = {r["field_id"]: dict(r) for r in ev_rows}
+    fields_out = []
+    for f in fields:
+        d = dict(f)
+        e = ev.get(f["id"])
+        d["pixel_evidence"] = (
+            {
+                "doc_id": e["doc_id"],
+                "page_id": e["page_id"],
+                "page_seq": e["page_seq"],
+                "bbox_px": e["bbox_px"],  # None for text-path fields (no crop)
+            }
+            if e and e["doc_id"]
+            else None
+        )
+        fields_out.append(d)
     return {
         "record": dict(rec),
-        "fields": [dict(f) for f in fields],
+        "fields": fields_out,
         "decisions": [dict(d) for d in decisions],
         "confidence": confidence,
     }

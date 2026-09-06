@@ -4,6 +4,7 @@ import { api } from '../api'
 import CropImage from '../CropImage'
 import ConfidenceChip from '../ConfidenceChip'
 import SourceFiles from '../SourceFiles'
+import DocViewer from '../DocViewer'
 import HistoryPanel from '../HistoryPanel'
 import IntegrityPanel from '../IntegrityPanel'
 import { useAuth } from '../auth'
@@ -314,6 +315,7 @@ export default function RecordViewPage() {
   const [evidenceFor, setEvidenceFor] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [activeFieldId, setActiveFieldId] = useState(null)
   const { role } = useAuth()
 
   const load = useCallback(() => {
@@ -379,20 +381,36 @@ export default function RecordViewPage() {
       {msg && <div className="ok-box">{msg}</div>}
       {error && <div className="error-box">{error}</div>}
 
-      <h2>Fields — every value one click from its evidence</h2>
-      <div className="detail-grid">
-        {fields.map((f) => (
-          <div key={f.id} className="value-card">
-            <div className="fv-label">{f.field_type.replace(/_/g, ' ')} <span className={`badge ${f.state}`} style={{ float: 'right' }}>{f.state}</span></div>
-            <div className={`fv-value${f.current_value == null ? ' unknown' : ''}`}>
-              {f.current_value ?? 'UNKNOWN'}
-            </div>
-            <div className="row" style={{ gap: 6 }}>
-              <button className="btn btn-sm" onClick={() => setEvidenceFor(f.id)}>Evidence</button>
-              <FieldEditor field={f} record={record} onDone={load} />
-            </div>
+      <div className="record-cols">
+        <div className="record-main">
+          <h2>Fields — every value one click from its evidence</h2>
+          <div className="detail-grid">
+            {fields.map((f) => (
+              <div
+                key={f.id}
+                id={`field-card-${f.id}`}
+                className={`value-card${activeFieldId === f.id ? ' field-active' : ''}`}
+                onClick={() => setActiveFieldId(f.id)}
+              >
+                <div className="fv-label">{f.field_type.replace(/_/g, ' ')} <span className={`badge ${f.state}`} style={{ float: 'right' }}>{f.state}</span></div>
+                <div className={`fv-value${f.current_value == null ? ' unknown' : ''}`}>
+                  {f.current_value ?? 'UNKNOWN'}
+                </div>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-sm" onClick={() => setEvidenceFor(f.id)}>Evidence</button>
+                  <FieldEditor field={f} record={record} onDone={load} />
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+        <aside className="record-aside">
+          <DocViewer
+            fields={fields}
+            activeFieldId={activeFieldId}
+            onSelectField={(fid) => setActiveFieldId(fid)}
+          />
+        </aside>
       </div>
 
       <StateActions record={record} onDone={load} />
