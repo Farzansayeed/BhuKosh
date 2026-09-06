@@ -56,6 +56,10 @@ class SetPermissionIn(BaseModel):
     allowed: bool
 
 
+class ResetPermissionsIn(BaseModel):
+    roles: list[str] | None = None  # None = all roles
+
+
 def _check_role(role: str) -> str:
     if role not in VALID_ROLES:
         raise Problem(422, "Validation Failed",
@@ -218,6 +222,32 @@ def set_permission(role: str, permission: str, body: SetPermissionIn,
                  f"{'holds' if len(holders) == 1 else 'hold'} '{permission}' — "
                  f"this role now has the same permission as them."
                  if holders else None),
+    }
+
+
+@router.post("/permissions/reset")
+def reset_permissions(body: ResetPermissionsIn,
+                      user: dict = Depends(require_permission("admin:permissions"))) -> dict:
+    """Restore role(s) to the seeded default matrix (the classic five-role RBAC).
+    Admin always retains all permissions regardless."""
+    roles = body.roles or list(VALID_ROLES)
+    for r in roles:
+        _check_role(r)
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        for r in roles:
+            conn.execute("DELETE FROM role_permissions WHERE role = %s", (r,))
+            for perm in ROLE_DEFAULTS[r]:
+                conn.execute(
+                    """INSERT INTO role_permissions (role, permission, allowed, updated_by)
+                       VALUES (%s, %s, TRUE, %s)""",
+                    (r, perm, user["username"]),
+                )
+        _audit(conn, user, "admin.permissions.reset", {"roles": roles})
+        conn.commit()
+    invalidate_cache()
+    return {
+        "reset": roles,
+        "note": f"Restored {', '.join(roles)} to the seeded default matrix.",
     }
 
 

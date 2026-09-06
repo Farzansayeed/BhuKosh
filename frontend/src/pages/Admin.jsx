@@ -147,6 +147,7 @@ function Users({ users, me, act }) {
 
 function Permissions({ perm, act }) {
   const [note, setNote] = useState(null)
+  const [confirmReset, setConfirmReset] = useState(false)
 
   if (!perm) return <p className="muted">Loading…</p>
 
@@ -158,12 +159,34 @@ function Permissions({ perm, act }) {
     } catch (e) { throw e }
   }
 
+  const resetAll = async () => {
+    setConfirmReset(false)
+    await act(
+      () => api('/admin/permissions/reset', { method: 'POST', body: {} }),
+      'All roles restored to the default permission matrix.'
+    )
+  }
+
   return (
     <>
       {note && <div className="card"><p style={{ margin: 0 }}>{note}</p></div>}
       <div className="card" style={{ overflowX: 'auto' }}>
-        <h2>Role → permission matrix (live)</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
+        <div className="row">
+          <h2 style={{ margin: 0 }}>Role → permission matrix (live)</h2>
+          {confirmReset ? (
+            <>
+              <span className="muted" style={{ fontSize: 12 }}>Restore all roles to defaults?</span>
+              <button className="btn btn-sm btn-danger" onClick={resetAll}>Yes, reset</button>
+              <button className="btn btn-sm" onClick={() => setConfirmReset(false)}>Cancel</button>
+            </>
+          ) : (
+            <button className="btn btn-sm right" title="Restore every role to its seeded default permissions"
+              onClick={() => setConfirmReset(true)}>
+              ↺ Reset to defaults
+            </button>
+          )}
+        </div>
+        <p className="muted" style={{ marginTop: 8 }}>
           Toggles apply immediately — no redeploy. Granting a permission another role already
           holds will show you which. Admin always retains everything (last-resort authority).
         </p>
