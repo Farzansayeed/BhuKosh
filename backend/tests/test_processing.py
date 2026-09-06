@@ -93,7 +93,7 @@ def sandbox(monkeypatch, tmp_path):
         conn.commit()
 
 
-def _make_doc_with_page(tok: str, content: bytes | None = None) -> dict:
+def _make_doc_with_page(tok: str, content: bytes | None = None, mime: str = "image/png") -> dict:
     # documents.sha256 and intake_manifests.manifest_hash are both globally unique,
     # so every call needs unique page bytes AND a unique manifest body.
     if content is None:
@@ -106,7 +106,7 @@ def _make_doc_with_page(tok: str, content: bytes | None = None) -> dict:
     d = client.post(
         "/documents",
         data={"manifest_id": str(m["id"])},
-        files={"file": ("t.png", content, "image/png")},
+        files={"file": ("t.pdf" if mime == "application/pdf" else "t.png", content, mime)},
         headers={"Authorization": f"Bearer {tok}"},
     ).json()
     p = client.post(
@@ -429,3 +429,51 @@ def test_high_confidence_stays_extracted(tokens, monkeypatch):
     )
     assert rec.status_code == 201, rec.text
     assert rec.json()["record"]["current_state"] == "EXTRACTED"
+
+
+def test_pdf_vision_run(tokens, monkeypatch):
+    """PS #8: a scanned PDF extracts via vision, without crop attempts."""
+    from app.extract import gemini_client
+
+    captured = {}
+
+    def fake_extract(image_bytes, mime, schema, **kw):
+        captured["mime"] = mime
+        return {
+            "khasra_no": "१२३", "owner_name": "किसान",
+            "area_raw": "1.2", "village": "TEST-REPLAY",
+            "khasra_no_bbox": [10, 10, 50, 20],
+            "owner_name_bbox": None, "area_raw_bbox": None, "village_bbox": None,
+            "khasra_no_confidence": 0.9, "owner_name_confidence": 0.9,
+            "area_raw_confidence": 0.9, "village_confidence": 0.9,
+        }
+
+    monkeypatch.setattr(gemini_client, "structured_extract_image", fake_extract)
+
+    minimal_pdf = (
+        b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+        b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+        b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\n"
+        b"xref\n0 4\ntrailer<</Size 4/Root 1 0 R>>\n%%EOF"
+    )
+    combo = _make_doc_with_page(tokens["operator"], content=minimal_pdf, mime="application/pdf")
+    assert combo["document"]["mime"] == "application/pdf"
+
+    r = client.post(
+        f"/pages/{combo['page']['id']}/extract-image",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert r.status_code == 201, r.text
+    payload = r.json()
+    assert payload["mime"] == "application/pdf"
+    assert captured["mime"] == "application/pdf"
+    assert payload["fields"]["khasra_no"] == "१२३"
+    assert payload["crops"] == {}  # no crop math on PDFs
+
+    detail = client.get(
+        f"/extraction/runs/{payload['run_id']}",
+        headers={"Authorization": f"Bearer {tokens['auditor']}"},
+    ).json()
+    cand = {c["field_type"]: c for c in detail["candidates"]}
+    assert cand["khasra_no"]["crop_id"] is None
+    assert cand["khasra_no"]["confidence"] == 0.9

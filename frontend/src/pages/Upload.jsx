@@ -103,8 +103,7 @@ export default function UploadPage() {
 
         <h2>2 · Scan and input mode</h2>
         <div className="field">
-          <label>Page image (PNG/JPEG, single page)</label>
-          <input type="file" accept="image/png,image/jpeg"
+          <label>Page image (PNG/JPEG, single page)</label>          <input type="file" accept="image/png,image/jpeg,application/pdf"
                  onChange={(e) => setFile(e.target.files[0] ?? null)} required />
         </div>
         <div className="field">

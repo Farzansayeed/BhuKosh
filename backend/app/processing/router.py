@@ -61,7 +61,15 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
     rate_limit.enforce(user["username"], route="/extraction")
 
     image_bytes = storage.open_uri(page["storage_uri"])
-    mime = "image/png" if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+    # Honest mime from magic bytes — PDFs (PS #8) pass straight to the engine,
+    # which reads them natively. Crops only make sense for single-page images.
+    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        mime = "image/png"
+    elif image_bytes[:5] == b"%PDF-":
+        mime = "application/pdf"
+    else:
+        mime = "image/jpeg"
+    is_pdf = mime == "application/pdf"
     input_hash = storage.sha256_bytes(image_bytes)
 
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
@@ -89,10 +97,11 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
         bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS}
         confs = {f: raw.get(f"{f}_confidence") for f in FIELDS}
 
-        # LAYOUT: materialize one evidence crop per non-null bbox.
+        # LAYOUT: materialize one evidence crop per non-null bbox (images only —
+        # bbox pixel math is undefined for PDFs).
         # (Page pixels = the document scan; pages carry metadata, documents carry bytes.)
         crop_rows: dict[str, dict] = {}
-        if any(bboxes.values()):
+        if any(bboxes.values()) and not is_pdf:
             for f, bb in bboxes.items():
                 if bb:
                     try:
@@ -172,6 +181,7 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
         "status": "SUCCEEDED",
         "document_id": page["document_id"],
         "page_id": page_id,
+        "mime": mime,
         "fields": fields,
         "crops": {f: cid for f, cid in stored.items() if cid},
     }
