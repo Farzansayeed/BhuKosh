@@ -15,6 +15,7 @@ from psycopg.rows import dict_row
 from app.config import get_settings
 from app.db import conninfo
 from app.main import app
+from app.rules.registry import REGISTRY_VERSION
 
 client = TestClient(app)
 
@@ -120,7 +121,7 @@ def test_every_decision_emits_chained_event(tokens):
                     headers=h)
     assert r.status_code == 200
 
-    events = client.get("/audit/events", headers=ha).json()
+    events = client.get("/audit/events", headers=ha, params={"after_seq": 0, "limit": 1000}).json()
     mine = [e for e in events if e["entity_refs"].get("record_id") == rec_id]
     assert len(mine) == 1
     ev = mine[0]
@@ -136,7 +137,7 @@ def test_every_decision_emits_chained_event(tokens):
                     json={"decision_type": "REOPEN", "expected_version": 2, "reason": "audit-test-2"},
                     headers=h)
     assert r.status_code == 200
-    events = client.get("/audit/events", headers=ha).json()
+    events = client.get("/audit/events", headers=ha, params={"limit": 1000}).json()
     mine = sorted([e for e in events if e["entity_refs"].get("record_id") == rec_id], key=lambda e: e["seq"])
     assert len(mine) == 2
     assert mine[1]["prev_hash"] == mine[0]["payload_hash"]
@@ -203,7 +204,7 @@ def test_export_json_bundle_with_evidence_manifest(tokens):
     exp = r.json()
     assert exp["format"] == "json"
     manifest = exp["evidence_manifest"]
-    assert manifest["rulebook_version"] == "1"
+    assert manifest["rulebook_version"] == REGISTRY_VERSION
     # validation advanced the record one version before export
     assert manifest["record_version"] == rec["record"]["record_version"] + 1
 
@@ -214,7 +215,7 @@ def test_export_json_bundle_with_evidence_manifest(tokens):
     bundle = dl.json()
     assert bundle["record"]["id"] == rec_id
     assert len(bundle["fields"]) == 4
-    assert bundle["evidence"]["rulebook_version"] == "1"
+    assert bundle["evidence"]["rulebook_version"] == REGISTRY_VERSION
     assert isinstance(bundle["evidence"]["validation"], list)
 
     # immutability trigger
