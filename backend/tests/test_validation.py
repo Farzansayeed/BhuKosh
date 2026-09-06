@@ -171,6 +171,9 @@ def test_area_jump_cross_document_join(tokens):
     exp = jump["explanation"]
     assert exp["related_record_id"] == first["id"]
     assert "2.40" in exp["calculation"] and "7.00" in exp["calculation"]
+    # human-readable evidence (PS #11/#12: a reviewer must understand it cold)
+    assert "disagree" in exp["summary"] and str(first["id"]) in exp["summary"]
+    assert all(isinstance(e, dict) and e["field"] == "area_raw" and e["value"] for e in exp["evidence"])
     assert body["record"]["current_state"] == "REVIEW_REQUIRED"
 
 

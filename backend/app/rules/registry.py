@@ -83,7 +83,14 @@ def r_unknown_field(rec: dict, fields: list[dict], others: list[dict]) -> list[d
                     {"field_type": f["field_type"], "candidate_is_unknown": True},
                     {
                         "rule": "R-UNKNOWN-FIELD",
-                        "evidence": [f["id"]],
+                        "summary": (
+                            f"The engine could not read the {f['field_type']} on this record, "
+                            "so it was marked UNKNOWN. The record cannot be approved until "
+                            "the page is re-extracted or the field is corrected by hand."
+                        ),
+                        "evidence": [
+                            {"record_id": f["record_id"], "field": f["field_type"], "value": None, "field_id": f["id"]}
+                        ],
                         "calculation": f"field '{f['field_type']}' has no value (UNKNOWN)",
                         "related_record_id": None,
                         "recommended_action": "Re-extract the page or correct the field manually before approval.",
@@ -128,7 +135,24 @@ def r_area_jump(rec: dict, fields: list[dict], others: list[dict]) -> list[dict]
                     {"own_bigha": own_area, "other_bigha": other_area, "delta_pct": round(delta_pct, 1)},
                     {
                         "rule": "R-AREA-JUMP",
-                        "evidence": [own["id"], o["area_field_id"]],
+                        "summary": (
+                            f"Two records for the same plot (village '{rec['village_code']}', "
+                            f"khasra {rec['khasra_no'] or '—'}) disagree wildly on area: "
+                            f"record #{o['record_id']} says {other_area:.2f} bigha, this record "
+                            f"says {own_area:.2f} bigha — a {delta_pct:+.0f}% jump. Either one "
+                            "scan was misread, or a real transfer/mutation happened between them."
+                        ),
+                        "evidence": [
+                            {
+                                "record_id": rec["id"], "field": "area_raw", "value": own_v,
+                                "field_id": own["id"], "role": "this record",
+                            },
+                            {
+                                "record_id": o["record_id"], "field": "area_raw",
+                                "value": o["area_raw"], "field_id": o["area_field_id"],
+                                "role": "other record",
+                            },
+                        ],
                         "calculation": f"{other_area:.2f}→{own_area:.2f} bigha ({delta_pct:+.0f}%)",
                         "related_record_id": o["record_id"],
                         "recommended_action": "Verify both scans; a legitimate transfer/mutation may explain the jump — route for officer review.",

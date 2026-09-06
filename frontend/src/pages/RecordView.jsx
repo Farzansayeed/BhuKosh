@@ -1,8 +1,60 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import CropImage from '../CropImage'
 import { useAuth } from '../auth'
+
+// Anomaly explanations arrive as structured JSON from the rules engine.
+// Render them as plain language: a summary sentence, labeled evidence with
+// links, and the raw JSON only as a collapsible last resort. Older anomalies
+// (numeric evidence arrays) still fall back to raw JSON.
+function AnomalyExplanation({ anomaly }) {
+  const ex = anomaly.explanation || {}
+  const ev = Array.isArray(ex.evidence) ? ex.evidence : []
+  const labeled = ev.length > 0 && typeof ev[0] === 'object'
+  return (
+    <div style={{ maxWidth: 560 }}>
+      {ex.summary
+        ? <p style={{ margin: '0 0 6px', whiteSpace: 'pre-line' }}>{ex.summary}</p>
+        : !labeled && <p className="mono muted" style={{ margin: 0 }}>{JSON.stringify(ex)}</p>}
+      {labeled && (
+        <ul style={{ margin: '0 0 6px', paddingLeft: 18 }}>
+          {ev.map((e, i) => (
+            <li key={i}>
+              {e.record_id != null
+                ? <Link to={`/records/${e.record_id}`}>record #{e.record_id}</Link>
+                : 'this record'}
+              {' — '}
+              <span className="mono">{e.field}</span>
+              {': '}
+              {e.value != null ? <b>{String(e.value)}</b> : <i>no value read</i>}
+              {e.role ? ` (${e.role})` : ''}
+            </li>
+          ))}
+        </ul>
+      )}
+      {ex.calculation && (
+        <p style={{ margin: '2px 0' }}>
+          <span className="chip sev-warn">{ex.calculation}</span>
+        </p>
+      )}
+      {ex.recommended_action && (
+        <p className="muted" style={{ margin: '4px 0 0', fontSize: 13 }}>→ {ex.recommended_action}</p>
+      )}
+      <details style={{ marginTop: 4, fontSize: 12 }}>
+        <summary className="muted">technical detail</summary>
+        <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: '4px 0 0' }}>{JSON.stringify(ex, null, 2)}</pre>
+      </details>
+    </div>
+  )
+}
+
+// Rule-engine detail dicts read better as "key: value · key: value" than JSON.
+function humanDetail(d) {
+  if (d == null) return '—'
+  if (typeof d !== 'object') return String(d)
+  return Object.entries(d).map(([k, v]) => `${k}: ${v}`).join(' · ')
+}
 
 function EvidenceDialog({ fieldId, onClose }) {
   const [chain, setChain] = useState(null)
@@ -300,7 +352,7 @@ export default function RecordViewPage() {
                     <td>{r.rule_version}</td>
                     <td>{r.severity}</td>
                     <td><span className={`badge ${r.outcome === 'pass' ? 'SUCCEEDED' : 'MISMATCH'}`}>{r.outcome}</span></td>
-                    <td className="mono muted" style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{JSON.stringify(r.detail)}</td>
+                    <td className="mono muted" style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{humanDetail(r.detail)}</td>
                   </tr>
                 ))}
                 {validation.results.length === 0 && <tr><td colSpan={5} className="muted">No results yet — run validation.</td></tr>}
@@ -317,7 +369,7 @@ export default function RecordViewPage() {
                         <td className="mono">{a.rule_id}</td>
                         <td>{a.severity}</td>
                         <td><span className={`badge ${a.status}`}>{a.status}</span></td>
-                        <td className="mono muted" style={{ maxWidth: 420 }}>{JSON.stringify(a.explanation)}</td>
+                        <td><AnomalyExplanation anomaly={a} /></td>
                       </tr>
                     ))}
                   </tbody>
