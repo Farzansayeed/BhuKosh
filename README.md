@@ -5,6 +5,8 @@ Intelligent Land Record Digitization & Validation System (Smart India Hackathon 
 An evidence-and-validation layer for India's digitized land-record ecosystem:
 **SOURCE → EVIDENCE → EXTRACTION → REASONING → VERIFICATION → PROVENANCE → TRUSTED OUTPUT**
 
+**Live:** app → https://bhukosh.vercel.app · API → https://bhukosh-api.vercel.app
+
 Full architecture: see the master plan (v4.1, frozen).
 
 ## Quickstart (dev)
