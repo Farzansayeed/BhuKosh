@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     data_dir: str = "../data"
     max_upload_bytes: int = 50 * 1024 * 1024  # 50 MB
 
+    # Storage backend (auto -> supabase when URL+key present, else local files)
+    storage_backend: str = "auto"
+    supabase_url: str = ""
+    supabase_service_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

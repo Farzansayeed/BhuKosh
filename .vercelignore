@@ -1,0 +1,16 @@
+.git
+.github
+backend/.venv
+backend/logs
+backend/tests
+backend/scripts/__pycache__
+infra
+data
+logs
+node_modules
+frontend/node_modules
+frontend/dist
+.env
+.env.*
+.env.local
+*.log
