@@ -2,6 +2,13 @@
 
 Intelligent Land Record Digitization & Validation System (Smart India Hackathon 2026, Ministry of Rural Development).
 
+BhuKosh turns scans of handwritten land registers — in any Indian script — into validated digital records.
+Every value the AI extracts stays bound to its evidence: click any field to see the exact pixels it was read
+from, the engine run that produced it, and the human decisions behind it, all on a tamper-evident audit chain.
+Business rules catch impossible data — area jumps, missing owners, unreadable fields — before a human ever
+reviews, and every human correction teaches the extractor not to repeat the mistake. To see it in 60 seconds:
+log in at the app link below as `checker` / `checker-dev`, open a pending record, and click **Evidence**.
+
 An evidence-and-validation layer for India's digitized land-record ecosystem:
 **SOURCE → EVIDENCE → LAYOUT → EXTRACTION → REASONING → VERIFICATION → PROVENANCE → TRUSTED OUTPUT**
 
