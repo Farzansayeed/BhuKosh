@@ -130,6 +130,20 @@ tr:hover td { background: var(--panel-2); }
 .right { margin-left: auto; }
 .mt { margin-top: 14px; }
 
+/* Engine selector — honest strengths/weaknesses per engine */
+.engine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.engine-card {
+  display: block; background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; cursor: pointer; font-size: 13px;
+}
+.engine-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.engine-card.disabled { opacity: 0.55; cursor: not-allowed; }
+.engine-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.engine-best { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; }
+.engine-list { margin: 6px 0 0; padding-left: 4px; list-style: none; font-size: 12px; }
+.engine-list li { padding: 1px 0; }
+.engine-weak { color: var(--warn); }
+
 .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .value-card {
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px;

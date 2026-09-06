@@ -40,6 +40,16 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.7-flash"
 
+    # Second engine (Groq — OpenAI-compatible; free tier is TEXT-only now,
+    # no vision models: good for bulk printed-text extraction)
+    groq_api_key: str = ""
+    groq_model: str = "qwen/qwen3.8-27b"
+
+    # Third engine (OpenRouter — one key, many free models; chosen after a
+    # live bake-off on a real Gujarati scan: minimax-m3:free read it best)
+    openrouter_api_key: str = ""
+    openrouter_model: str = "minimax/minimax-m3:free"
+
     # /extract per-user rate limit (sliding window over successful calls)
     extract_rate_limit_per_min: int = 5
     extract_rate_window_seconds: int = 60

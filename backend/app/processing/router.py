@@ -20,7 +20,8 @@ from ..auth.permissions import require_permission
 from ..config import get_settings
 from ..db import conninfo
 from ..errors import Problem
-from ..extract import gemini_client, rate_limit
+from ..extract import rate_limit
+from .. import engines as engine_svc
 from ..learning import service as learning_service
 from ..extract.schema import (
     ALL_FIELDS,
@@ -43,16 +44,16 @@ ROUTING_FIELDS = CORE_FIELDS  # workflow routing keys off the core set only
 class ExtractIn(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     page_id: int | None = None
+    engine: str = Field(default="gemini", pattern="^(gemini|openrouter|groq)$")
 
 
 @router.post("/pages/{page_id}/extract-image", status_code=201)
-def extract_page_image(page_id: int, user: dict = Depends(require_permission("extract:run"))) -> dict:
+def extract_page_image(page_id: int, engine: str = "gemini", user: dict = Depends(require_permission("extract:run"))) -> dict:
     """Vision extraction: the stored page bytes ARE the engine input (evidence-bound).
 
     Input hash = SHA-256 of the exact scan bytes sent to the model, so the run
     replays against the identical image later.
     """
-    s = get_settings()
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         page = conn.execute(
             """SELECT p.id, p.document_id, p.seq_no, d.storage_uri
@@ -81,15 +82,21 @@ def extract_page_image(page_id: int, user: dict = Depends(require_permission("ex
     hints = learning_service.build_hints_block()
     hints_count = sum(1 for ln in hints.splitlines() if ln.startswith("- "))
 
+    engine_id = engine if engine in ("gemini", "openrouter", "groq") else "gemini"
+    engine_label = f"{engine_id}-vision"
+    try:
+        model_version = engine_svc._ENGINES[engine_id]["model"]()
+    except Exception:
+        model_version = engine_id
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         run = conn.execute(
             """INSERT INTO processing_runs
                  (document_id, page_id, kind, engine_name, engine_version,
                   prompt_id, prompt_version, input_hash, status, config)
-               VALUES (%s, %s, 'EXTRACT', 'gemini-vision', %s, %s, %s, %s, 'RUNNING', %s)
+               VALUES (%s, %s, 'EXTRACT', %s, %s, %s, %s, %s, 'RUNNING', %s)
                RETURNING *""",
-            (page["document_id"], page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION,
-             input_hash, Jsonb({"hints_count": hints_count})),
+            (page["document_id"], page_id, engine_label, model_version, PROMPT_ID, PROMPT_VERSION,
+             input_hash, Jsonb({"hints_count": hints_count, "engine": engine_id})),
         ).fetchone()
         conn.commit()
 
@@ -101,8 +108,9 @@ def extract_page_image(page_id: int, user: dict = Depends(require_permission("ex
         }
         vision_schema = {"type": "OBJECT", "properties": combined}
         prompt_text = f"{PROMPT}\n\n{VISION_ANNOTATE}" + (f"\n\n{hints}" if hints else "")
-        raw = gemini_client.structured_extract_image(
-            image_bytes, mime, vision_schema, prompt=prompt_text
+        raw, used_model = engine_svc.run_structured(
+            engine_id, "image", prompt=prompt_text, schema=vision_schema,
+            image_bytes=image_bytes, mime=mime,
         )
         fields = {f: raw.get(f) for f in FIELDS if raw.get(f) is not None or f in CORE_FIELDS}
         bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS if raw.get(f) is not None}
@@ -122,8 +130,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_permission("ex
 
         raw_doc = {
             "run_id": run["id"],
-            "model": s.gemini_model,
-            "engine": "gemini-vision",
+            "model": used_model,
+            "engine": engine_label,
             "prompt_id": PROMPT_ID,
             "prompt_version": PROMPT_VERSION,
             "input_sha256": input_hash,
@@ -155,8 +163,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_permission("ex
                     """INSERT INTO candidates
                          (run_id, crop_id, field_type, raw_value, value, is_unknown,
                           confidence, nbest_rank, engine)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'gemini-vision')""",
-                    (run["id"], stored.get(f), f, v, v, v is None, conf),
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s)""",
+                    (run["id"], stored.get(f), f, v, v, v is None, conf, engine_label),
                 )
             conn.execute(
                 "UPDATE processing_runs SET status = 'SUCCEEDED', finished_at = now(), "
@@ -166,8 +174,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_permission("ex
             conn.execute(
                 """INSERT INTO api_usage (username, route, status, model, prompt_chars, result_json)
                    VALUES (%s, '/extraction', 'ok', %s, 0, %s)""",
-                (user["username"], s.gemini_model,
-                 Jsonb({"run_id": run["id"], "mode": "image-layout",
+                (user["username"], used_model,
+                 Jsonb({"run_id": run["id"], "mode": "image-layout", "engine": engine_id,
                         "candidates": sum(1 for v in fields.values() if v is not None),
                         "crops": len(stored),
                         "min_confidence": min([c for c in confs.values() if c is not None], default=None)})),
@@ -183,7 +191,7 @@ def extract_page_image(page_id: int, user: dict = Depends(require_permission("ex
             conn.execute(
                 "INSERT INTO api_usage (username, route, status, model, result_json) "
                 "VALUES (%s, '/extraction', 'error', %s, %s)",
-                (user["username"], s.gemini_model, Jsonb({"run_id": run["id"], "error": err})),
+                (user["username"], model_version, Jsonb({"run_id": run["id"], "error": err, "engine": engine_id})),
             )
             conn.commit()
         raise
@@ -233,24 +241,30 @@ def extract_document(
     input_hash = storage.sha256_bytes(body.text.encode("utf-8"))
     hints = learning_service.build_hints_block()
     hints_count = sum(1 for ln in hints.splitlines() if ln.startswith("- "))
+    engine_id = body.engine if body.engine in ("gemini", "openrouter", "groq") else "gemini"
+    try:
+        model_version = engine_svc._ENGINES[engine_id]["model"]()
+    except Exception:
+        model_version = engine_id
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         run = conn.execute(
             """INSERT INTO processing_runs
                  (document_id, page_id, kind, engine_name, engine_version,
                   prompt_id, prompt_version, input_hash, status, config)
-               VALUES (%s, %s, 'EXTRACT', 'gemini', %s, %s, %s, %s, 'RUNNING', %s)
+               VALUES (%s, %s, 'EXTRACT', %s, %s, %s, %s, %s, 'RUNNING', %s)
                RETURNING *""",
-            (doc_id, body.page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION,
-             input_hash, Jsonb({"hints_count": hints_count})),
+            (doc_id, body.page_id, engine_id, model_version, PROMPT_ID, PROMPT_VERSION,
+             input_hash, Jsonb({"hints_count": hints_count, "engine": engine_id})),
         ).fetchone()
         conn.commit()
 
     try:
         prompt_text = f"{PROMPT}\n\nRECORD TEXT:\n{body.text}" + (f"\n\n{hints}" if hints else "")
-        raw = gemini_client.structured_extract(prompt_text, KHASRA_SCHEMA)
+        raw, used_model = engine_svc.run_structured(engine_id, "text", prompt=prompt_text, schema=KHASRA_SCHEMA)
         raw_doc = {
             "run_id": run["id"],
-            "model": s.gemini_model,
+            "model": used_model,
+            "engine": engine_id,
             "prompt_id": PROMPT_ID,
             "prompt_version": PROMPT_VERSION,
             "input_sha256": input_hash,
@@ -269,8 +283,8 @@ def extract_document(
                 conn.execute(
                     """INSERT INTO candidates
                          (run_id, field_type, raw_value, value, is_unknown, nbest_rank, engine)
-                       VALUES (%s, %s, %s, %s, %s, 1, 'gemini')""",
-                    (run["id"], f, v, v, v is None),
+                       VALUES (%s, %s, %s, %s, %s, 1, %s)""",
+                    (run["id"], f, v, v, v is None, engine_id),
                 )
             conn.execute(
                 "UPDATE processing_runs SET status = 'SUCCEEDED', finished_at = now(), "
@@ -280,8 +294,8 @@ def extract_document(
             conn.execute(
                 """INSERT INTO api_usage (username, route, status, model, prompt_chars, result_json)
                    VALUES (%s, '/extraction', 'ok', %s, %s, %s)""",
-                (user["username"], s.gemini_model, len(body.text),
-                 Jsonb({"run_id": run["id"], "candidates": len(text_fields)})),
+                (user["username"], used_model, len(body.text),
+                 Jsonb({"run_id": run["id"], "candidates": len(text_fields), "engine": engine_id})),
             )
             conn.commit()
     except Exception as e:
@@ -295,7 +309,7 @@ def extract_document(
             conn.execute(
                 "INSERT INTO api_usage (username, route, status, model, prompt_chars) "
                 "VALUES (%s, '/extraction', 'error', %s, %s)",
-                (user["username"], s.gemini_model, len(body.text)),
+                (user["username"], model_version, len(body.text)),
             )
             conn.commit()
         raise

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import CropImage from '../CropImage'
@@ -16,11 +16,27 @@ export default function UploadPage() {
   const [file, setFile] = useState(null)
   const [text, setText] = useState('')
   const [visionMode, setVisionMode] = useState(true)
+  const [engines, setEngines] = useState([])
+  const [engine, setEngine] = useState('gemini')
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState('')
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [recordId, setRecordId] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    api('/engines')
+      .then((list) => {
+        if (!alive) return
+        setEngines(list)
+        // default to the first available engine (catalog order = recommendation order)
+        const avail = list.find((e) => e.available && e.id !== 'groq')
+        if (avail) setEngine(avail.id)
+      })
+      .catch(() => {}) // selector is optional; extraction defaults to gemini
+    return () => { alive = false }
+  }, [])
 
   if (!canWrite) {
     return <><h1>{t('upload_title')}</h1><div className="error-box">{t('upload_denied', { role })}</div></>
@@ -51,11 +67,11 @@ export default function UploadPage() {
       let ex
       if (visionMode) {
         setStep(t('step_vision'))
-        const v = await api(`/pages/${p.id}/extract-image`, { method: 'POST' })
+        const v = await api(`/pages/${p.id}/extract-image?engine=${encodeURIComponent(engine)}`, { method: 'POST' })
         ex = { run: { id: v.run_id, status: v.status }, candidates: [], crops: v.crops || {}, fields: v.fields }
       } else {
         setStep(t('step_extract'))
-        ex = await api(`/documents/${d.id}/extract`, { method: 'POST', body: { text, page_id: p.id } })
+        ex = await api(`/documents/${d.id}/extract`, { method: 'POST', body: { text, page_id: p.id, engine } })
       }
 
       setResult({ manifest: m, document: d, page: p, ...ex })
@@ -121,6 +137,31 @@ export default function UploadPage() {
             <label>{t('register_line_label')}</label>
             <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
                       placeholder="राम प्रसाद पुत्र श्याम लाल, खसरा २३४, क्षेत्र २-४० बीघा, ग्राम सलेमपुर" required />
+          </div>
+        )}
+
+        {engines.length > 0 && (
+          <div className="field">
+            <label>{t('engine_choice')}</label>
+            <div className="engine-grid">
+              {engines.map((e) => (
+                <label key={e.id} className={`engine-card${engine === e.id ? ' active' : ''}${e.available ? '' : ' disabled'}`}>
+                  <input type="radio" name="engine" checked={engine === e.id}
+                         disabled={!e.available || (visionMode && e.id === 'groq')} onChange={() => setEngine(e.id)} />
+                  <span className="engine-head">
+                    <b>{e.label}</b>
+                    <span className="mono muted">{e.model}</span>
+                    {!e.available && <span className="badge REJECTED">{t('engine_unavailable')}</span>}
+                    {e.available && visionMode && e.id === 'groq' && <span className="badge">{t('engine_text_only')}</span>}
+                  </span>
+                  <span className="engine-best">{t('engine_best_for')}: {e.best_for}</span>
+                  <ul className="engine-list">
+                    {e.strengths.map((s) => <li key={s}>+ {s}</li>)}
+                    {e.weaknesses.map((w) => <li key={w} className="engine-weak">− {w}</li>)}
+                  </ul>
+                </label>
+              ))}
+            </div>
           </div>
         )}
 

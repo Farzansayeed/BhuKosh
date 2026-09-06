@@ -9,6 +9,7 @@ from .auth.router import router as auth_router
 from .config import get_settings
 from .custody.router import router as custody_router
 from .db import conninfo
+from .engines import catalog as engine_catalog
 from .errors import Problem, problem_handler, validation_handler
 from .extract.router import router as extract_router
 from .exports.router import router as exports_router
@@ -42,6 +43,12 @@ app.include_router(stats_router)
 app.include_router(learning_router)
 app.include_router(verification_router)
 app.include_router(admin_router)
+
+
+@app.get("/engines")
+def list_engines():
+    """Extraction-engine catalog with honest strengths — uploaders choose per job."""
+    return engine_catalog()
 
 
 @app.get("/health")
