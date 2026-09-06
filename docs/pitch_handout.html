@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BhuKosh — SIH Pitch Handout</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Calibri, Arial, sans-serif;
+    color: #1a2233; font-size: 10.5pt; line-height: 1.45; margin: 0;
+  }
+  .cover {
+    border-bottom: 3px solid #1d4ed8; padding-bottom: 14pt; margin-bottom: 16pt;
+  }
+  .cover h1 { font-size: 24pt; margin: 0 0 4pt; color: #1d4ed8; }
+  .cover .sub { font-size: 11pt; color: #444; margin: 0 0 8pt; }
+  .cover .positioning {
+    font-size: 12pt; font-style: italic; color: #0f172a;
+    border-left: 3px solid #1d4ed8; padding-left: 10pt; margin: 10pt 0;
+  }
+  .cover .meta { font-size: 9pt; color: #666; }
+  h2 {
+    font-size: 14.5pt; color: #1d4ed8; margin: 18pt 0 6pt;
+    border-bottom: 1.5px solid #d7ddf0; padding-bottom: 3pt;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11.5pt; margin: 12pt 0 4pt; color: #0f172a; page-break-after: avoid; }
+  p { margin: 5pt 0; }
+  ul, ol { margin: 4pt 0 8pt; padding-left: 18pt; }
+  li { margin: 2.5pt 0; }
+  strong { color: #0f172a; }
+  table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 9.5pt; page-break-inside: avoid; }
+  th { background: #1d4ed8; color: #fff; text-align: left; padding: 4pt 6pt; }
+  td { border: 1px solid #ccd3e8; padding: 4pt 6pt; vertical-align: top; }
+  tr:nth-child(even) td { background: #f4f6fc; }
+  .quote {
+    background: #eef3ff; border-left: 4px solid #1d4ed8;
+    padding: 8pt 12pt; margin: 8pt 0; font-style: italic; page-break-inside: avoid;
+  }
+  .beat { background: #f8fafc; border: 1px solid #dde3f3; border-radius: 6px; padding: 7pt 10pt; margin: 5pt 0; page-break-inside: avoid; }
+  .beat b.num { display: inline-block; background: #1d4ed8; color: #fff; border-radius: 50%; width: 15pt; height: 15pt; line-height: 15pt; text-align: center; font-size: 9pt; margin-right: 5pt; }
+  .qa { page-break-inside: avoid; margin: 7pt 0; }
+  .qa .q { font-weight: 700; color: #b3382c; }
+  .qa .a { margin: 2pt 0 0; }
+  .warn {
+    background: #fff7ed; border: 1px solid #fdba74; border-radius: 6px;
+    padding: 7pt 10pt; margin: 8pt 0; page-break-inside: avoid;
+  }
+  .footer-note { font-size: 8.5pt; color: #777; border-top: 1px solid #ccc; padding-top: 6pt; margin-top: 16pt; }
+  .section { page-break-before: always; }
+  .nobreak { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <h1>BhuKosh — Team Pitch Handout</h1>
+  <p class="sub">Intelligent Land Record Digitization &amp; Validation System · SIH26018 · Ministry of Rural Development</p>
+  <p class="positioning">"An intelligent evidence and validation layer for India's digitized land-record ecosystem."</p>
+  <p class="meta">
+    Live: https://bhukosh.vercel.app &nbsp;·&nbsp; API: https://bhukosh-api.vercel.app &nbsp;·&nbsp; API docs: /docs<br>
+    Demo logins: checker / checker-dev · certifier / certifier-dev · auditor / auditor-dev (roles: checker, certifier, auditor, admin, operator)<br>
+    Format: ~4 min talk + 90-second live demo. Every claim in this handout is backed by the running product.
+  </p>
+</div>
+
+<h2>The story spine (everyone memorizes these)</h2>
+<div class="quote">Opening: "India has digitized its land records. We built the layer that makes those records trustworthy."</div>
+<div class="quote">Category claim: "Anyone can OCR a document. The hard problem is proving where every value came from, detecting contradictions, abstaining when uncertain, and preserving who decided what."</div>
+<div class="quote">Closing: "We don't just digitize what the document says. We preserve why the system believes each value, what evidence supports it, what conflicts with it, and who ultimately decided it."</div>
+
+<h2>1 · Understanding of the Problem Statement</h2>
+<p><b>The problem in one breath:</b> India has computerized Records of Rights for 95%+ of villages under DILRMP — but a scanned PDF in a state database is <i>not</i> a reliable structured record. The last mile — reading handwritten, multilingual, damaged registers into clean, verified data — is still manual, slow, and error-prone.</p>
+<p><b>The ladder to say out loud:</b> <strong>Scanned ≠ Structured ≠ Validated ≠ Verified ≠ Auditable.</strong> Digitization stalls at step one; every step after is the real problem.</p>
+<h3>Requirements decoded from the PS</h3>
+<ul>
+  <li>Multilingual extraction — printed <i>and</i> handwritten</li>
+  <li>Structured fields: owner, khasra, khata, area, village, tehsil, district, classification, ownership, mutation, registration</li>
+  <li>Automated validation + duplicate detection</li>
+  <li>Confidence scoring with uncertain-field flagging</li>
+  <li>Human review workflow · learning mechanism</li>
+  <li>LRMS / DILRMP / GIS integration</li>
+  <li>Secure repository + audit trails · dashboards · APIs · RBAC</li>
+</ul>
+<h3>Stakeholders</h3>
+<ul>
+  <li><b>Revenue officers &amp; tehsil staff</b> — the reviewers who must trust and sign off</li>
+  <li><b>Digitization agencies</b> — the operators processing crores of pages</li>
+  <li><b>State LRMS/DILRMP administrators</b> — the integrators who need clean structured data</li>
+  <li><b>Citizens</b> — whose ownership disputes depend on record accuracy</li>
+</ul>
+<div class="quote">"This is a high-stakes transcription problem. Land = litigation, identity, credit. A silently wrong area value doesn't just lose a record — it can trigger a dispute. The problem is not OCR. It is trust."</div>
+
+<h2>2 · Technology Depth &amp; Stack</h2>
+<table>
+  <tr><th>Layer</th><th>Choice</th><th>Why this (and not the obvious alternative)</th></tr>
+  <tr><td>AI extraction</td><td>Google Gemini — vision + text, schema-locked JSON, temperature 0</td><td>Reads any Indic script out of the box; a bespoke Indic handwriting-OCR model was out of scope and inferior at day 0</td></tr>
+  <tr><td>Backend</td><td>FastAPI + Python</td><td>Async, typed, auto-generates the OpenAPI government integrators consume</td></tr>
+  <tr><td>Database</td><td>PostgreSQL (Supabase, transaction pooler)</td><td>The product <i>is</i> relational integrity: FK evidence chains, constraints, trigger-enforced immutability. No document store can enforce that</td></tr>
+  <tr><td>Storage</td><td>Content-addressed (SHA-256) object storage — Supabase Storage / local disk</td><td>Tamper-evidence from byte-identity; deduplication for free</td></tr>
+  <tr><td>Frontend</td><td>React + Vite</td><td>Small and fast; same-origin /api proxy = zero CORS surface</td></tr>
+  <tr><td>Deploy</td><td>Vercel serverless + Supabase</td><td>Push-to-deploy, zero-ops, free tier — a judge can clone and run in minutes</td></tr>
+</table>
+<h3>The three depth signals (for engineer judges)</h3>
+<ol>
+  <li><b>Evidence-chain data model (14 tables).</b> Every extracted value is a foreign-key walk: field_value → candidate → processing_run (engine, model, prompt version, input SHA-256) → page → document (SHA-256) → intake manifest (hash-of-hashes). Vision runs add per-field bounding boxes cut into content-addressed <b>evidence crops</b> — we can show the exact pixels a value came from.</li>
+  <li><b>Deterministic vs probabilistic separation.</b> The AI only ever reads. Units, arithmetic, thresholds, state transitions, provenance, audit — deterministic Python + SQL. Versioned rule registry (5 rules); re-validation auto-resolves stale findings, audited.</li>
+  <li><b>Production-grade details we didn't skip:</b> JWT + RBAC on every endpoint · claim locks (HTTP 423) + optimistic versioning (409) · hash-chained audit log enforced by DB triggers (not app discipline) · per-user rate limiting + usage accounting · sanitized errors · pooler-safe connections (we caught a real psycopg auto-prepare + PgBouncer conflict via tests).</li>
+</ol>
+<h3>Scaling story</h3>
+<p>Stateless API (already serverless — horizontal by construction) · Postgres partitioning by region · worker pools for batch intake · object storage scales inherently · extraction adapter interface takes future sovereign/local Indic models without touching the validation core.</p>
+
+<div class="section"></div>
+<h2>3 · Innovation / Novelty</h2>
+<div class="quote">OCR tools compete on extraction accuracy. We compete on verifiability.</div>
+<p><b>Five novel mechanics — all live, all demoable:</b></p>
+<ol>
+  <li><b>Truth assurance vs reading confidence — separated.</b><br>
+    Reading confidence = "did we read the pixels right?" — per-field 0–1, document-level = the <i>worst</i> field, color-banded green/amber/red.<br>
+    <b>Truth assurance</b> = "why believe it's correct?" — a SUFFICIENT / PARTIAL / INSUFFICIENT verdict computed from independently checkable signals: rule outcomes, cross-record corroboration (same village+khasra must agree on area), document integrity, human authority.<br>
+    <i>Killer fact: a human-VERIFIED record honestly returns INSUFFICIENT when evidence contradicts it. A human sign-off never silences contradicting evidence.</i></li>
+  <li><b>One-click visual evidence.</b> Click any value → the exact crop of the scan it was read from, plus the full provenance chain. Live-verified: Gujarati khasra ૫૫૯ traced to pixels [64,156,89,177] of the original scan, with run, prompt version, and input hash.</li>
+  <li><b>Abstention as a first-class citizen.</b> If the engine can't read a field it says UNKNOWN — and that record is forced into human review. "I don't know" is safer than a guess.</li>
+  <li><b>Plain-language anomalies with linked evidence.</b> Not <span style="font-family:Consolas,monospace">evidence:[630,610]</span> — sentences: "Two records for the same plot disagree wildly on area… either a misread or a real mutation," with clickable related records.</li>
+  <li><b>An inspectable learning loop.</b> Human corrections become few-shot guidance injected into future extraction prompts — auditable at GET /learning/hints. Not silent overnight retraining.</li>
+</ol>
+<div class="warn"><b>Honest boundaries (judges reward this):</b> no blockchain — tamper-evidence comes from hash chains + trigger enforcement, which is the actual requirement. External-registry cross-checks are an explicit adapter slot, never faked, because no public land-record API exists.</div>
+
+<h2>4 · Implementation Feasibility</h2>
+<div class="quote">"It is not a mockup. It is deployed, and you can use it right now."</div>
+<ul>
+  <li><b>Live:</b> https://bhukosh.vercel.app — RBAC-gated, five roles, seeded demo records across pipeline states</li>
+  <li><b>Working end-to-end today:</b> upload scan → multilingual extraction (Devanagari + Gujarati verified; images + scanned PDFs) → confidence + crops → validation → review workflow → certification → immutable exports with evidence manifests → dashboards</li>
+  <li><b>Engineering maturity:</b> test suite with a stubbed engine (no API quota in CI) · SQL migrations for the full schema · seed + smoke scripts · offline mode (portable local Postgres + local storage) for no-internet deployments</li>
+  <li><b>Cost to run:</b> essentially nothing at prototype scale (free tiers). A state deployment's cost is dominated by AI extraction calls, which scale with volume and can be batched off-peak</li>
+  <li><b>Deployment path:</b> clone → set 6 env vars → migrate → seed → live. Or use the already-running cloud instance. Portable offline bundle for sensitive environments</li>
+</ul>
+
+<h2>5 · Potential Social Impact</h2>
+<ul>
+  <li><b>Revenue officers:</b> review <i>by exception</i> — rules and confidence routing mean a human looks only at flagged records, with evidence in front of them. One screen shows the scan, the pixels, the conflicts, the decision history.</li>
+  <li><b>Citizens:</b> land disputes take years; a large share trace to record errors. Fewer transcription errors upstream = fewer disputes downstream. Verifiable records also speed up loans, subsidies, and acquisitions that stall on ownership verification.</li>
+  <li><b>Digitization agencies:</b> auditable output — they can prove what their operators corrected, and the AI learns from those corrections instead of repeating mistakes.</li>
+  <li><b>The ecosystem:</b> DILRMP's integration goals need clean, trustworthy structured data — every record carries its evidence manifest, built for that handoff.</li>
+</ul>
+<p><b>Scale of reach:</b> land records underpin ~140 crore people's most valuable asset. Even one state's legacy backlog is crores of pages. The unit economics — AI reads, humans only adjudicate uncertainty — is what makes full digitization at scale financially conceivable.</p>
+<p><b>Measured, not claimed:</b> the system computes its own accuracy proxy (1 − correction rate), tracks anomalies per rule, and stores every correction — impact claims become measurable as volume grows.</p>
+
+<div class="section"></div>
+<h2>6 · Business Opportunities / Scalability</h2>
+<h3>Adoption strategy — the wedge</h3>
+<ol>
+  <li><b>Pilot: one tehsil's legacy backlog.</b> Fixed corpus, measurable baseline (manual transcription time vs BhuKosh-assisted time), the review workflow absorbs the uncertainty.</li>
+  <li><b>Expand: district → state.</b> Same engine, new <i>state profile</i> — validation rules and field conventions differ by state; our registry is versioned and pluggable.</li>
+  <li><b>Integrate:</b> evidence-manifested exports + OpenAPI are the LRMS/DILRMP on-ramp; adapters per state's actual exchange mechanism (APIs, file exchange — we don't assume one universal format).</li>
+</ol>
+<h3>Commercialization models</h3>
+<ul>
+  <li><b>B2G SaaS</b> — per-page/per-record processing contracts; digitization agencies subcontract the AI layer</li>
+  <li><b>Vendored deployment</b> — states requiring data sovereignty (our offline mode is the edge)</li>
+  <li><b>Verification-as-a-service</b> — banks/NBFCs doing land-title due diligence; the evidence manifest is exactly what an underwriter needs</li>
+  <li><b>The data asset (long-term)</b> — calibration data: which fields/scripts/scanners fail, reusable across every customer</li>
+</ul>
+<h3>Sustainability &amp; moat</h3>
+<p>Open core (the validation/evidence framework) + paid deployment/integration services. The moat is not the AI call — it is the accumulated evidence model, the per-state rule registry, and the calibration data. Those compound with volume and are expensive to replicate.</p>
+
+<h2>7 · The Live Demo — 90 seconds, 8 beats</h2>
+<div class="beat"><b class="num">1</b><b>Upload the ugly document</b> — a real degraded Gujarati VF-6 or faded Hindi register, vision mode. <i>Say: "This is the kind of source document the system has to deal with."</i></div>
+<div class="beat"><b class="num">2</b><b>Show the extraction</b> — 12 fields in the original script, per-field confidence, the document confidence chip. <i>"Every reading carries its own doubt."</i></div>
+<div class="beat"><b class="num">3</b><b>Click Evidence on a field</b> — the crop appears. <i>"That ૫૫૯ came from these exact pixels — here is the run, the prompt version, the input hash."</i></div>
+<div class="beat"><b class="num">4</b><b>Run validation</b> — an anomaly fires in plain language (area jump vs the related record), with links. <i>"The system doesn't say fraud. It says: inconsistency, human required."</i></div>
+<div class="beat"><b class="num">5</b><b>Truth assurance</b> — click Check assurance. <i>"Every checkable signal, cross-checked against the database — watch this VERIFIED record honestly fail because evidence contradicts it."</i></div>
+<div class="beat"><b class="num">6</b><b>Open Source documents</b> — the original file itself, SHA-256 on screen. <i>"What the AI saw is exactly what you see."</i></div>
+<div class="beat"><b class="num">7</b><b>Decide as checker → certify as certifier → export</b> — the immutable JSON with the full evidence manifest.</div>
+<div class="beat"><b class="num">8</b><b>The closer — /learning/hints</b> — <i>"This correction, made by a human earlier today, is now a lesson the AI carries into every future extraction."</i></div>
+
+<div class="section"></div>
+<h2>8 · Judge-question prep — the six hardest</h2>
+<div class="qa"><p class="q">Q1 — "What if the AI is wrong?"</p>
+<p class="a">The architecture assumes it. Candidates + UNKNOWN abstention; per-field confidence with automatic review routing; deterministic validation; cross-record checks; human authority; audited decisions. The AI never gets the final word — and a VERIFIED record can still fail truth assurance when evidence contradicts it.</p></div>
+<div class="qa"><p class="q">Q2 — "Isn't this just OCR?"</p>
+<p class="a">OCR is our extraction layer; the product is the evidence-and-validation layer around it: field-level provenance, evidence crops, deterministic rules, cross-record reasoning, decision capture, tamper-evident audit.</p></div>
+<div class="qa"><p class="q">Q3 — "Are you determining land ownership?"</p>
+<p class="a">No. We extract, validate, correlate, and present evidence. Authorized officers decide — and those decisions become part of the auditable record. CERTIFY is a record of an authorized human decision, nothing more.</p></div>
+<div class="qa"><p class="q">Q4 — "What if there is no government API?"</p>
+<p class="a">We don't depend on one. Adapter model: APIs, JSON/CSV exchange, file-based handoff per state. The external-registry check in truth assurance is explicitly labeled "adapter slot" — we show honesty rather than fake integration.</p></div>
+<div class="qa"><p class="q">Q5 — "What if the AI model disappears?"</p>
+<p class="a">Raw outputs, input hashes, and prompt versions are preserved — historical runs are attested and inspectable even if the provider vanishes. Deterministic stages replay exactly.</p></div>
+<div class="qa"><p class="q">Q6 — "Why not blockchain?"</p>
+<p class="a">The requirement is append-only, tamper-evident provenance, not decentralized consensus. Postgres triggers + hash chaining give the property without the overhead.</p></div>
+
+<h2>9 · Do NOT claim (credibility guardrails)</h2>
+<div class="warn">
+<ul>
+  <li>❌ Offline AI extraction — offline mode covers the database/workflow, not the AI call (extraction is a live cloud engine)</li>
+  <li>❌ ULPIN generation — not even "we assign ULPIN"; not in the schema yet</li>
+  <li>❌ Fraud detection / declaring records fraudulent — we detect <i>inconsistencies</i>, humans judge</li>
+  <li>❌ Two-engine disagreement demos — single engine + confidence + rules (N-best is schema-ready but not built)</li>
+  <li>❌ Legal ownership determination, court admissibility, title adjudication</li>
+  <li>❌ Specific accuracy percentages — we show the accuracy <i>proxy</i> and its methodology instead</li>
+  <li>❌ Production-scale throughput claims — "architecture designed to scale" is the honest line</li>
+</ul>
+</div>
+
+<h2>10 · Quick facts card (for rapid-fire answers)</h2>
+<table>
+  <tr><th>Question</th><th>Answer</th></tr>
+  <tr><td>What is it?</td><td>Evidence + validation layer over AI extraction for scanned land records</td></tr>
+  <tr><td>Scripts verified?</td><td>Devanagari (UP khatauni) + Gujarati (VF-6), live</td></tr>
+  <tr><td>File types?</td><td>Images (PNG/JPEG/TIFF) + scanned PDFs</td></tr>
+  <tr><td>Fields?</td><td>12 — 4 core (gate routing) + 8 extended (captured when present)</td></tr>
+  <tr><td>Validation rules?</td><td>5 deterministic, versioned — incl. cross-record area-jump (&gt;25% same village+khasra)</td></tr>
+  <tr><td>Roles?</td><td>5 — operator, checker, certifier, auditor, admin; RBAC on every endpoint</td></tr>
+  <tr><td>Audit?</td><td>Hash-chained, trigger-enforced append-only, verifiable via /audit/verify</td></tr>
+  <tr><td>Learning?</td><td>Corrections → few-shot hints injected into future prompts (inspectable)</td></tr>
+  <tr><td>Data model?</td><td>14 tables, 8 migrations, PostgreSQL</td></tr>
+  <tr><td>Deployment?</td><td>Vercel serverless + Supabase (live), portable offline Postgres mode</td></tr>
+  <tr><td>Demo logins</td><td>checker/checker-dev · certifier/certifier-dev · auditor/auditor-dev · admin/bhukosh-admin · operator/operator-dev</td></tr>
+</table>
+
+<p class="footer-note">BhuKosh — SIH26018 pitch handout · structured to the judges' six evaluation criteria (problem understanding · technology depth · innovation · feasibility · social impact · business/scalability) · generated from docs/pitch.md</p>
+
+</body>
+</html>
