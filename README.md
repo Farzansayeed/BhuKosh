@@ -70,6 +70,24 @@ gitignored — never commit real credentials.
 - [x] WEB UI — React/Vite workspace: login (RBAC-aware), records list, record view with per-field evidence chain + corrections + decisions, upload-to-record pipeline, audit viewer, JSON/CSV export download (Hindi/English labels)
 - [ ] REMAINING: review-queue ranking, evaluation harness, demo kit (seed data, offline mode, PWA install, video)
 
+## Deployment (Vercel + Supabase)
+
+Two Vercel projects, one shared Supabase backend:
+
+- **API** — https://bhukosh-api.vercel.app (`backend/` as a Python serverless function;
+  entrypoint `backend/api/index.py`, deps from `backend/requirements.txt`)
+- **App** — https://bhukosh.vercel.app (Vite build; `/api/*` is rewritten server-side to the
+  API URL, so the browser stays same-origin and no CORS is needed)
+
+Server-side env vars (set via `vercel env add`, stored as secrets): `DATABASE_URL` (Supabase
+transaction pooler, port 6543), `JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `SUPABASE_URL`,
+`SUPABASE_SERVICE_KEY`, `ENV=production`. Serverless has no persistent disk, so document bytes
+live in a **private Supabase Storage bucket** (`bhukosh`) — `app/storage.py` picks the backend
+automatically (`STORAGE_BACKEND=auto`: Supabase when `SUPABASE_URL`+`SUPABASE_SERVICE_KEY` are
+set, local `data/` files otherwise, which keeps the offline demo path intact).
+
+Pushing to `master` redeploys both projects (GitHub integration).
+
 ## Frontend (dev)
 
 ```bash
