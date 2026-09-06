@@ -81,6 +81,9 @@ Two Vercel projects, one shared Supabase backend:
 - **App** — https://bhukosh.vercel.app (Vite build; `/api/*` is rewritten server-side to the
   API URL, so the browser stays same-origin and no CORS is needed)
 
+Both projects watch this repo (Root Directory: `backend` / `frontend` respectively), so a
+push to `master` builds and deploys each side automatically.
+
 Server-side env vars (set via `vercel env add`, stored as secrets): `DATABASE_URL` (Supabase
 transaction pooler, port 6543), `JWT_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `SUPABASE_URL`,
 `SUPABASE_SERVICE_KEY`, `ENV=production`. Serverless has no persistent disk, so document bytes
