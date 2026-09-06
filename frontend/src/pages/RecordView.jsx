@@ -4,6 +4,8 @@ import { api } from '../api'
 import CropImage from '../CropImage'
 import ConfidenceChip from '../ConfidenceChip'
 import SourceFiles from '../SourceFiles'
+import HistoryPanel from '../HistoryPanel'
+import IntegrityPanel from '../IntegrityPanel'
 import { useAuth } from '../auth'
 
 // Anomaly explanations arrive as structured JSON from the rules engine.
@@ -449,6 +451,10 @@ export default function RecordViewPage() {
       <VerifyPanel recordId={record.id} />
 
       <SourceFiles recordId={record.id} />
+
+      <IntegrityPanel recordId={record.id} onDone={load} />
+
+      <HistoryPanel recordId={record.id} />
 
       <div className="card">
         <h2>Decision trail ({decisions.length})</h2>

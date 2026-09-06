@@ -87,23 +87,116 @@ def create_record_from_run(run_id: int, user: dict = Depends(require_permission(
 @router.get("/records")
 def list_records(
     state: str | None = None,
+    search: str | None = Query(default=None, max_length=120),
+    sort_by: str = Query(default="id"),
+    order: str = Query(default="desc", pattern="^(asc|desc)$"),
     limit: int = Query(default=50, ge=1, le=500),
     user: dict = Depends(get_current_user),
 ) -> list[dict]:
+    """Search + sort + filter, executed entirely in Postgres.
+
+    Search: the term is matched against land_records (id/village/khasra/khata)
+    and every extracted field value (owner, survey, tehsil, district…). Fast
+    path uses the pg_trgm GIN indexes (migration 010) with similarity ranking;
+    if the extension is unavailable we fall back to a plain ILIKE scan — same
+    results, same API.
+
+    Sorting: whitelisted columns only (never interpolate user input into SQL).
+    'confidence' sorts scored records first (best first), unscored last.
+    'relevance' is the default under search (trigram similarity rank).
+    """
+    SORTS = {
+        "id":          "r.id",
+        "village":     "r.village_code",
+        "khasra":      "r.khasra_no",
+        "state":       "r.current_state",
+        "version":     "r.record_version",
+        "updated":     "r.updated_at",
+        "created":     "r.created_at",
+        "claim":       "r.claim_owner",
+        "confidence":  "_conf",
+        "relevance":   "_sim",
+    }
+    if sort_by not in SORTS:
+        raise Problem(422, "Validation Failed",
+                      f"sort_by must be one of {', '.join(sorted(SORTS))}.")
+    order_sql = "ASC" if order == "asc" else "DESC"
+
+    term = (search or "").strip()
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        try:
+            has_trgm = conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm')"
+            ).fetchone()["exists"]
+        except Exception:  # noqa: BLE001
+            has_trgm = False
+
+        params: list = []
+        where = []
         if state:
-            rows = conn.execute(
-                "SELECT * FROM land_records WHERE current_state = %s ORDER BY id DESC LIMIT %s",
-                (state, limit),
-            ).fetchall()
+            where.append("r.current_state = %s")
+            params.append(state)
+        if term:
+            like = f"%{term}%"
+            if has_trgm:
+                where.append(
+                    "(r.village_code %% %s OR r.khasra_no %% %s "
+                    "OR r.village_code ILIKE %s OR r.khasra_no ILIKE %s "
+                    "OR r.id::text = %s "
+                    "OR EXISTS (SELECT 1 FROM field_values fv WHERE fv.record_id = r.id "
+                    "AND (fv.current_value %% %s OR fv.current_value ILIKE %s)))"
+                )
+                params += [term, term, like, like, term, term, like]
+            else:
+                where.append(
+                    "(r.village_code ILIKE %s OR r.khasra_no ILIKE %s OR r.id::text = %s "
+                    "OR EXISTS (SELECT 1 FROM field_values fv WHERE fv.record_id = r.id "
+                    "AND fv.current_value ILIKE %s))"
+                )
+                params += [like, like, term, like]
+
+        where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+        if has_trgm and term:
+            sim = "GREATEST(similarity(r.village_code, %s), similarity(r.khasra_no, %s), " \
+                  "COALESCE((SELECT max(similarity(fv.current_value, %s)) FROM field_values fv " \
+                  "WHERE fv.record_id = r.id), 0))"
+            sim_params = [term, term, term]
         else:
-            rows = conn.execute(
-                "SELECT * FROM land_records ORDER BY id DESC LIMIT %s", (limit,)
-            ).fetchall()
+            sim = "0"
+            sim_params = []
+
+        conf = ("(SELECT min(c.confidence) FROM field_values fv "
+                "JOIN candidates c ON c.id = fv.selected_candidate_id "
+                "WHERE fv.record_id = r.id AND fv.state <> 'CORRECTED')")
+
+        sort_expr = SORTS[sort_by]
+        if sort_expr == "_sim":
+            sort_expr = "_sim DESC NULLS LAST"
+            order_sql = "" if order == "desc" else " ASC"
+        elif sort_expr == "_conf":
+            # scored records first when DESC (best first); NULLs always last
+            sort_expr = f"_conf {order_sql} NULLS LAST"
+            order_sql = ""
+
+        sql = f"""
+            SELECT r.*, {sim} AS _sim, {conf} AS _conf
+            FROM land_records r
+            {where_sql}
+            ORDER BY {sort_expr} {order_sql}, r.id DESC
+            LIMIT %s
+        """.replace("{sim}", sim)  # keep it explicit; f-string nesting got messy
+        all_params = sim_params + params + [limit]
+        rows = conn.execute(sql, all_params).fetchall()
         out = []
         for r in rows:
             d = dict(r)
-            d["confidence"] = _confidence_summary(r["id"], conn)
+            d.pop("_sim", None)
+            mc = d.pop("_conf", None)
+            d["confidence"] = {
+                "min_confidence": round(float(mc), 2) if mc is not None else None,
+                "band": ("high" if mc >= 0.85 else "medium" if mc >= 0.6 else "low") if mc is not None else "unknown",
+            }
             out.append(d)
         return out
 
@@ -111,6 +204,73 @@ def list_records(
 @router.get("/records/{record_id}")
 def get_record(record_id: int, user: dict = Depends(get_current_user)) -> dict:
     return _record_bundle(record_id)
+
+
+@router.get("/records/{record_id}/history")
+def record_history(record_id: int, user: dict = Depends(get_current_user)) -> dict:
+    """Past vs current: the complete versioned story of one record.
+
+    current: the live field values (what an export would contain).
+    past: one entry per decision that changed a value or state — before →
+    after, who, when, why — read from human_decisions (the append-only
+    source of truth; current values are a projection of this history).
+    timeline: state transitions with timestamps from the same decisions.
+    """
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        rec = conn.execute("SELECT * FROM land_records WHERE id = %s", (record_id,)).fetchone()
+        if not rec:
+            raise Problem(404, "Not Found", "No such record.")
+        current = conn.execute(
+            """SELECT fv.id AS field_id, fv.field_type, fv.current_value, fv.state,
+                      fv.occurrence, c.confidence, c.is_unknown
+                 FROM field_values fv
+                 LEFT JOIN candidates c ON c.id = fv.selected_candidate_id
+                WHERE fv.record_id = %s ORDER BY fv.id""",
+            (record_id,),
+        ).fetchall()
+        decisions = conn.execute(
+            """SELECT d.id, d.decision_type, d.field_id, fv.field_type,
+                      d.before_value, d.after_value, d.reason, d.actor_id, d.actor_role,
+                      d.record_version, d.created_at
+                 FROM human_decisions d
+                 LEFT JOIN field_values fv ON fv.id = d.field_id
+                WHERE d.record_id = %s ORDER BY d.id""",
+            (record_id,),
+        ).fetchall()
+
+    changes = []
+    timeline = []
+    for d in decisions:
+        entry = dict(d)
+        if d["decision_type"] == "CORRECTION" and d["field_type"]:
+            changes.append({
+                "field_type": d["field_type"],
+                "field_id": d["field_id"],
+                "before": (d["before_value"] or {}).get("value"),
+                "after": (d["after_value"] or {}).get("value"),
+                "reason": d["reason"],
+                "actor": d["actor_id"], "role": d["actor_role"],
+                "at": d["created_at"],
+                "record_version": d["record_version"],
+            })
+        if d["before_value"] and d["before_value"].get("record_state"):
+            timeline.append({
+                "from_state": d["before_value"]["record_state"],
+                "to_state": (d["after_value"] or {}).get("record_state"),
+                "decision_type": d["decision_type"],
+                "actor": d["actor_id"], "role": d["actor_role"],
+                "reason": d["reason"],
+                "at": d["created_at"],
+                "record_version": d["record_version"],
+            })
+
+    return {
+        "record": dict(rec),
+        "current": [dict(f) for f in current],
+        "changes": changes,
+        "timeline": timeline,
+        "decision_count": len(decisions),
+    }
 
 
 @router.get("/records/{record_id}/documents")
