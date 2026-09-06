@@ -39,13 +39,15 @@ function SourceDoc({ doc, expanded, onToggle }) {
   const isPdf = doc.mime === 'application/pdf'
 
   useEffect(() => {
-    if (!expanded || url) return
-    let revoked = null
+    if (!expanded) return
+    let cancelled = false
+    let objectUrl = null
     apiBlob(`/documents/${doc.id}/content`)
-      .then((b) => { revoked = URL.createObjectURL(b); setUrl(revoked) })
-      .catch((e) => setError(e.message))
-    return () => { if (revoked) URL.revokeObjectURL(revoked) }
-  }, [expanded, doc.id, url])
+      .then((b) => { if (!cancelled) { objectUrl = URL.createObjectURL(b); setUrl(objectUrl) } })
+      .catch((e) => { if (!cancelled) setError(e.message) })
+    // revoke only when the panel closes/unmounts — NOT when `url` state updates
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [expanded, doc.id])
 
   const kb = doc.size_bytes > 1024 ? `${Math.round(doc.size_bytes / 1024)} KB` : `${doc.size_bytes} B`
   return (
