@@ -15,6 +15,20 @@ KHASRA_SCHEMA = {
     "required": ["khasra_no", "owner_name", "area_raw"],
 }
 
+# Confidence self-report: one 0..1 score per field (PS #11). Nullable — the
+# engine may omit a score exactly where it omitted a value.
+FIELD_CONFIDENCE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        f"{name}_confidence": {
+            "type": "NUMBER",
+            "nullable": True,
+            "description": "0.0-1.0 confidence that the extracted value is read correctly",
+        }
+        for name in ("khasra_no", "owner_name", "area_raw", "village")
+    },
+}
+
 # Vision (LAYOUT) target: the same fields, each with the pixel bbox of the
 # exact region it was read from — [x1, y1, x2, y2] normalized to 0..1000.
 # The engine refines from full-page scanning to region-bound evidence.
@@ -47,6 +61,9 @@ PROMPT = (
     "back to the printed form footer only when the body has none. "
     "Keep each value in its printed script (Devanagari stays Devanagari, "
     "Gujarati stays Gujarati). "
+    "For each field also report {field}_confidence: your 0.0-1.0 confidence "
+    "that the value is read correctly (>=0.9 clearly printed and unambiguous; "
+    "<0.6 faded, ambiguous, overlapping, or guessed). "
     "If a field is unreadable or absent, return null for it instead of guessing."
 )
 

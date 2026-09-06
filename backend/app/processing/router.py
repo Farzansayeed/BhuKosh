@@ -20,12 +20,18 @@ from ..config import get_settings
 from ..db import conninfo
 from ..errors import Problem
 from ..extract import gemini_client, rate_limit
-from ..extract.schema import FIELD_BBOXES_SCHEMA, KHASRA_SCHEMA, PROMPT, VISION_ANNOTATE
+from ..extract.schema import (
+    FIELD_BBOXES_SCHEMA,
+    FIELD_CONFIDENCE_SCHEMA,
+    KHASRA_SCHEMA,
+    PROMPT,
+    VISION_ANNOTATE,
+)
 
 router = APIRouter(tags=["processing"])
 
 WRITE_ROLES = ("operator", "checker", "certifier", "admin")
-PROMPT_ID, PROMPT_VERSION = "khasra_register", "2"
+PROMPT_ID, PROMPT_VERSION = "khasra_register", "3"
 FIELDS = ("khasra_no", "owner_name", "area_raw", "village")
 
 
@@ -73,6 +79,7 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
         combined = {
             **KHASRA_SCHEMA["properties"],
             **FIELD_BBOXES_SCHEMA["properties"],
+            **FIELD_CONFIDENCE_SCHEMA["properties"],
         }
         vision_schema = {"type": "OBJECT", "properties": combined}
         raw = gemini_client.structured_extract_image(
@@ -80,6 +87,7 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
         )
         fields = {f: raw.get(f) for f in FIELDS}
         bboxes = {f: raw.get(f"{f}_bbox") for f in FIELDS}
+        confs = {f: raw.get(f"{f}_confidence") for f in FIELDS}
 
         # LAYOUT: materialize one evidence crop per non-null bbox.
         # (Page pixels = the document scan; pages carry metadata, documents carry bytes.)
@@ -100,7 +108,11 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
             "prompt_version": PROMPT_VERSION,
             "input_sha256": input_hash,
             "page_no": page["seq_no"],
-            "result": {**fields, **{f"{f}_bbox": bboxes[f] for f in FIELDS}},
+            "result": {
+                **fields,
+                **{f"{f}_bbox": bboxes[f] for f in FIELDS},
+                **{f"{f}_confidence": confs[f] for f in FIELDS},
+            },
         }
         raw_bytes = json.dumps(raw_doc, ensure_ascii=False, sort_keys=True).encode("utf-8")
         uri = storage.save_document(raw_bytes, storage.sha256_bytes(raw_bytes))
@@ -118,11 +130,14 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
                 stored[f] = row["id"]
             for f in FIELDS:
                 v = fields[f]
+                conf = confs[f]
+                conf = conf if isinstance(conf, (int, float)) and 0 <= conf <= 1 else None
                 conn.execute(
                     """INSERT INTO candidates
-                         (run_id, crop_id, field_type, raw_value, value, is_unknown, nbest_rank, engine)
-                       VALUES (%s, %s, %s, %s, %s, %s, 1, 'gemini-vision')""",
-                    (run["id"], stored.get(f), f, v, v, v is None),
+                         (run_id, crop_id, field_type, raw_value, value, is_unknown,
+                          confidence, nbest_rank, engine)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 1, 'gemini-vision')""",
+                    (run["id"], stored.get(f), f, v, v, v is None, conf),
                 )
             conn.execute(
                 "UPDATE processing_runs SET status = 'SUCCEEDED', finished_at = now(), "
@@ -134,7 +149,8 @@ def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_R
                    VALUES (%s, '/extraction', 'ok', %s, 0, %s)""",
                 (user["username"], s.gemini_model,
                  Jsonb({"run_id": run["id"], "mode": "image-layout",
-                        "candidates": len(FIELDS), "crops": len(stored)})),
+                        "candidates": len(FIELDS), "crops": len(stored),
+                        "min_confidence": min([c for c in confs.values() if c is not None], default=None)})),
             )
             conn.commit()
     except Exception as e:

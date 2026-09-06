@@ -19,6 +19,10 @@ from ..errors import Problem
 
 CLAIM_MINUTES = 15
 
+# Fields below this confidence route the record to REVIEW_REQUIRED (PS #11:
+# automatic identification of uncertain fields), same as UNKNOWN values.
+LOW_CONFIDENCE = 0.6
+
 DECIDE_ROLES = ("checker", "certifier", "admin")
 CERTIFY_ROLES = ("certifier", "admin")
 
@@ -124,7 +128,11 @@ def create_from_run(run_id: int) -> dict:
         khasra = by_field.get("khasra_no")
         village = by_field.get("village")
         has_unknown = any(c["is_unknown"] for c in cands)
-        state = "REVIEW_REQUIRED" if has_unknown else "EXTRACTED"
+        low_conf = any(
+            c["confidence"] is not None and c["confidence"] < LOW_CONFIDENCE
+            for c in cands
+        )
+        state = "REVIEW_REQUIRED" if (has_unknown or low_conf) else "EXTRACTED"
 
         rec = conn.execute(
             """INSERT INTO land_records (village_code, khasra_no, current_state)

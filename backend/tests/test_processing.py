@@ -57,6 +57,14 @@ def sandbox(monkeypatch, tmp_path):
         cap["id"] = conn.execute("SELECT COALESCE(max(id), 0) AS m FROM api_usage").fetchone()[0]
     yield
     with psycopg.connect(conninfo()) as conn:
+        # vision tests project runs into records: clear those projections first
+        conn.execute(
+            """DELETE FROM field_values WHERE record_id IN (
+                   SELECT id FROM land_records WHERE village_code LIKE 'TEST-%')"""
+        )
+        conn.execute(
+            "DELETE FROM land_records WHERE village_code LIKE 'TEST-%'"
+        )
         conn.execute(
             """DELETE FROM candidates WHERE run_id IN (
                    SELECT r.id FROM processing_runs r
@@ -344,3 +352,80 @@ def test_vision_run_failure_is_sanitized(tokens, monkeypatch):
     failed = [x for x in runs if x["status"] == "FAILED"]
     # Problem errors store their (already client-safe) message; raw exceptions store only the class name.
     assert failed and "HTTP 503" in failed[0]["error"]
+
+
+def test_low_confidence_routes_to_review(tokens, monkeypatch):
+    """PS #11: any field below 0.6 confidence -> record lands in REVIEW_REQUIRED."""
+    from app.extract import gemini_client
+
+    monkeypatch.setattr(
+        gemini_client, "structured_extract_image",
+        lambda image_bytes, mime, schema, **kw: {
+            "khasra_no": "૫૫૯", "owner_name": "ભુલાજી ખોડાજી",
+            "area_raw": "41.76", "village": "TEST-REPLAY",
+            "khasra_no_confidence": 0.98, "owner_name_confidence": 0.42,
+            "area_raw_confidence": 0.95, "village_confidence": None,
+        },
+    )
+    import io as _io
+    from PIL import Image as _Image
+
+    _buf = _io.BytesIO()
+    _t = time.time_ns()
+    _Image.new("RGB", (60, 40), (_t % 251 + 1,) * 3).save(_buf, "PNG")
+    combo = _make_doc_with_page(tokens["operator"], content=_buf.getvalue())
+
+    r = client.post(
+        f"/pages/{combo['page']['id']}/extract-image",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert r.status_code == 201, r.text
+
+    detail = client.get(
+        f"/extraction/runs/{r.json()['run_id']}",
+        headers={"Authorization": f"Bearer {tokens['auditor']}"},
+    ).json()
+    by_field = {c["field_type"]: c for c in detail["candidates"]}
+    assert by_field["owner_name"]["confidence"] == 0.42
+    assert by_field["village"]["confidence"] is None  # out-of-range/missing -> NULL
+
+    rec = client.post(
+        f"/records/from-run/{r.json()['run_id']}",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert rec.status_code == 201, rec.text
+    assert rec.json()["record"]["current_state"] == "REVIEW_REQUIRED"
+
+
+def test_high_confidence_stays_extracted(tokens, monkeypatch):
+    """All fields confident + known -> EXTRACTED (no forced review)."""
+    from app.extract import gemini_client
+
+    monkeypatch.setattr(
+        gemini_client, "structured_extract_image",
+        lambda image_bytes, mime, schema, **kw: {
+            "khasra_no": "૨૩୪", "owner_name": "राम प्रसाद",
+            "area_raw": "२-४०", "village": "TEST-REPLAY",
+            "khasra_no_confidence": 0.95, "owner_name_confidence": 0.9,
+            "area_raw_confidence": 0.88, "village_confidence": 0.93,
+        },
+    )
+    import io as _io
+    from PIL import Image as _Image
+
+    _buf = _io.BytesIO()
+    _t = time.time_ns()
+    _Image.new("RGB", (60, 40), (_t % 251 + 1,) * 3).save(_buf, "PNG")
+    combo = _make_doc_with_page(tokens["operator"], content=_buf.getvalue())
+
+    r = client.post(
+        f"/pages/{combo['page']['id']}/extract-image",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert r.status_code == 201, r.text
+    rec = client.post(
+        f"/records/from-run/{r.json()['run_id']}",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert rec.status_code == 201, rec.text
+    assert rec.json()["record"]["current_state"] == "EXTRACTED"
