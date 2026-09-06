@@ -115,6 +115,11 @@ append-only audit trail around every decision. The stage-by-stage detail:
   per-language Indic font stack and line-height in CSS
 - Note the distinction: the *interface* is trilingual; the *extraction engine* is script-agnostic
   (any Indic script in, structured values out — see below)
+- **Multilingual output of the scanned values** (`POST /records/{id}/translate`, migration 011): one
+  AI pass renders every extracted value into EN/HI/GU (names transliterated, never translated;
+  numbers script-neutral), stored per field in `field_values.translations` — the original value is
+  never modified, and human corrections wipe stale renderings. The record page shows the rendering
+  in the operator's UI language beneath the original (evidence) value
 
 **AI extraction (12 fields, any Indic script)**
 - Core fields gate workflow routing: `khasra_no`, `owner_name`, `area_raw`, `village`
