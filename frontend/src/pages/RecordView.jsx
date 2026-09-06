@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import CropImage from '../CropImage'
+import ConfidenceChip from '../ConfidenceChip'
 import { useAuth } from '../auth'
 
 // Anomaly explanations arrive as structured JSON from the rules engine.
@@ -259,7 +260,7 @@ export default function RecordViewPage() {
   if (error) return <><h1>Record #{id}</h1><div className="error-box">{error}</div></>
   if (!bundle) return <p className="muted">Loading…</p>
 
-  const { record, fields, decisions } = bundle
+  const { record, fields, decisions, confidence } = bundle
   const canValidate = ['operator', 'checker', 'certifier', 'admin'].includes(role)
     && ['EXTRACTED', 'VALIDATED'].includes(record.current_state)
   const canExport = ['operator', 'checker', 'certifier', 'admin'].includes(role)
@@ -302,6 +303,7 @@ export default function RecordViewPage() {
       <div className="row">
         <h1>Record #{record.id}</h1>
         <span className={`badge ${record.current_state}`} style={{ fontSize: 13 }}>{record.current_state.replace('_', ' ')}</span>
+        <ConfidenceChip confidence={confidence} />
         <span className="muted">v{record.record_version}</span>
       </div>
       <p className="sub">

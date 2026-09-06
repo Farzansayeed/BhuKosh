@@ -29,6 +29,34 @@ class DecisionIn(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+def _confidence_summary(record_id: int, conn) -> dict:
+    """Document-level confidence (PS #11): the WORST self-reported field score.
+    Min, not average — a record is exactly as trustworthy as its least-certain
+    reading. Human-corrected fields drop out (the human settled them)."""
+    row = conn.execute(
+        """SELECT min(c.confidence) AS min_confidence,
+                  count(*) FILTER (WHERE c.confidence IS NOT NULL) AS scored_fields,
+                  count(*) AS total_fields
+           FROM field_values fv
+           JOIN candidates c ON c.id = fv.selected_candidate_id
+           WHERE fv.record_id = %s AND fv.state <> 'CORRECTED'""",
+        (record_id,),
+    ).fetchone()
+    mc = row["min_confidence"]
+    if mc is None:
+        return {
+            "min_confidence": None, "band": "unknown",
+            "scored_fields": row["scored_fields"], "total_fields": row["total_fields"],
+        }
+    band = "high" if mc >= 0.85 else "medium" if mc >= 0.6 else "low"
+    return {
+        "min_confidence": round(float(mc), 2),
+        "band": band,
+        "scored_fields": row["scored_fields"],
+        "total_fields": row["total_fields"],
+    }
+
+
 def _record_bundle(record_id: int) -> dict:
     with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
         rec = conn.execute("SELECT * FROM land_records WHERE id = %s", (record_id,)).fetchone()
@@ -40,10 +68,12 @@ def _record_bundle(record_id: int) -> dict:
         decisions = conn.execute(
             "SELECT * FROM human_decisions WHERE record_id = %s ORDER BY id", (record_id,)
         ).fetchall()
+        confidence = _confidence_summary(record_id, conn)
     return {
         "record": dict(rec),
         "fields": [dict(f) for f in fields],
         "decisions": [dict(d) for d in decisions],
+        "confidence": confidence,
     }
 
 
@@ -69,7 +99,12 @@ def list_records(
             rows = conn.execute(
                 "SELECT * FROM land_records ORDER BY id DESC LIMIT %s", (limit,)
             ).fetchall()
-    return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["confidence"] = _confidence_summary(r["id"], conn)
+            out.append(d)
+        return out
 
 
 @router.get("/records/{record_id}")

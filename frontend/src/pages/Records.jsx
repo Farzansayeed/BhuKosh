@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import ConfidenceChip from '../ConfidenceChip'
 
 const STATES = ['', 'REVIEW_REQUIRED', 'EXTRACTED', 'VALIDATED', 'VERIFIED', 'OFFICER_CERTIFIED', 'REJECTED', 'ARCHIVED']
 
@@ -40,7 +41,7 @@ export default function RecordsPage() {
           <table>
             <thead>
               <tr>
-                <th>ID</th><th>Village</th><th>Khasra</th><th>State</th><th>Ver</th><th>Claim</th><th>Updated</th>
+                <th>ID</th><th>Village</th><th>Khasra</th><th>State</th><th>Confidence</th><th>Ver</th><th>Claim</th><th>Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -50,6 +51,7 @@ export default function RecordsPage() {
                   <td>{r.village_code}</td>
                   <td className="mono">{r.khasra_no}</td>
                   <td><span className={`badge ${r.current_state}`}>{r.current_state.replace('_', ' ')}</span></td>
+                  <td><ConfidenceChip confidence={r.confidence} /></td>
                   <td className="mono">{r.record_version}</td>
                   <td>{r.claim_owner ? <span className="badge OPEN">{r.claim_owner}</span> : <span className="muted">—</span>}</td>
                   <td className="muted">{r.updated_at ? new Date(r.updated_at).toLocaleString() : ''}</td>

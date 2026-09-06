@@ -162,3 +162,8 @@ tr:hover td { background: var(--panel-2); }
 .sev-info { background: rgba(59,130,246,0.25); color: #3b82f6; }
 .sev-ok { background: rgba(34,197,94,0.25); color: #22c55e; }
 .error-card { border-color: #ef4444; color: #ef4444; }
+
+/* document-level confidence chip (PS #11) */
+.conf-high { background: rgba(34,197,94,0.22); color: #22c55e; }
+.conf-medium { background: rgba(245,158,11,0.22); color: #f59e0b; }
+.conf-low { background: rgba(239,68,68,0.22); color: #ef4444; }
