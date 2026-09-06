@@ -112,6 +112,29 @@ def get_record(record_id: int, user: dict = Depends(get_current_user)) -> dict:
     return _record_bundle(record_id)
 
 
+@router.get("/records/{record_id}/documents")
+def record_documents(record_id: int, user: dict = Depends(get_current_user)) -> list[dict]:
+    """The complete source file(s) behind a record — every document a selected
+    candidate's extraction run read from. Served via /documents/{id}/content."""
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT d.id, d.original_filename, d.mime, d.size_bytes,
+                      d.sha256, d.created_at,
+                      (SELECT count(*) FROM pages p WHERE p.document_id = d.id) AS page_count
+               FROM documents d
+               WHERE d.id IN (
+                   SELECT pr.document_id
+                   FROM field_values fv
+                   JOIN candidates c ON c.id = fv.selected_candidate_id
+                   JOIN processing_runs pr ON pr.id = c.run_id
+                   WHERE fv.record_id = %s
+               )
+               ORDER BY d.id""",
+            (record_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @router.post("/records/{record_id}/claim")
 def claim_record(record_id: int, user: dict = Depends(require_roles(*DECIDE_ROLES))) -> dict:
     return service.claim(record_id, user)

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import CropImage from '../CropImage'
 import ConfidenceChip from '../ConfidenceChip'
+import SourceFiles from '../SourceFiles'
 import { useAuth } from '../auth'
 
 // Anomaly explanations arrive as structured JSON from the rules engine.
@@ -432,6 +433,8 @@ export default function RecordViewPage() {
       </div>
 
       <VerifyPanel recordId={record.id} />
+
+      <SourceFiles recordId={record.id} />
 
       <div className="card">
         <h2>Decision trail ({decisions.length})</h2>
