@@ -232,6 +232,12 @@ const en = {
   hide: 'Hide',
   open_full: 'Open full size in new tab ↗',
 
+  // multilingual output of scanned values
+  translate_btn: '🌐 Render in EN/हिन्दी/ગુજરાતી',
+  translate_tip: 'One AI pass renders every value into English, Hindi and Gujarati (names transliterated; originals untouched).',
+  translating: 'Rendering…',
+  translate_done: 'Rendered {n} field value(s) in all three languages.',
+
   // confidence chip
   conf_none_title: 'No engine confidence scores on this record (extracted before confidence scoring, or all fields human-corrected).',
   conf_title: 'Document confidence: {pct}% (the weakest field reading; {sf}/{tf} fields scored)',
@@ -470,6 +476,12 @@ const hi = {
   view_file: 'फ़ाइल देखें',
   hide: 'छिपाएँ',
   open_full: 'पूर्ण आकार में नए टैब में खोलें ↗',
+
+  // multilingual output of scanned values
+  translate_btn: '🌐 अंग्रेज़ी/हिन्दी/गुजराती में दिखाएँ',
+  translate_tip: 'एक AI पास प्रत्येक मान को अंग्रेज़ी, हिन्दी व गुजराती में दर्शाता है (नाम लिप्यंतरित; मूल अछूते)।',
+  translating: 'दर्शाया जा रहा है…',
+  translate_done: '{n} क्षेत्र-मान तीनों भाषाओं में दर्शाए गए।',
 
   conf_none_title: 'इस अभिलेख पर कोई इंजन विश्वास-स्कोर नहीं (विश्वास-स्कोरिंग से पहले निकाला गया, या सभी क्षेत्र मानव-सुधारित)।',
   conf_title: 'दस्तावेज़ विश्वास: {pct}% (सबसे कमज़ोर क्षेत्र-पठन; {sf}/{tf} क्षेत्र स्कोरित)',

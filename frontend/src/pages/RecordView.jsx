@@ -330,6 +330,8 @@ export default function RecordViewPage() {
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const [activeFieldId, setActiveFieldId] = useState(null)
+  const [translating, setTranslating] = useState(false)
+  const [trMsg, setTrMsg] = useState(null)
   const { role } = useAuth()
 
   const load = useCallback(() => {
@@ -379,6 +381,17 @@ export default function RecordViewPage() {
 
   const openAnomalies = (validation?.anomalies || []).filter((a) => a.status === 'OPEN')
 
+  // One engine pass renders every field value into EN/HI/GU; the UI then shows
+  // the rendering in the operator's chosen language under the original value.
+  const translate = async () => {
+    setTranslating(true); setTrMsg(null); setError(null)
+    try {
+      const r = await api(`/records/${record.id}/translate`, { method: 'POST' })
+      setTrMsg(t('translate_done', { n: r.fields_translated }))
+      load()
+    } catch (e) { setError(e.message) } finally { setTranslating(false) }
+  }
+
   return (
     <>
       <div className="row">
@@ -397,7 +410,14 @@ export default function RecordViewPage() {
 
       <div className="record-cols">
         <div className="record-main">
-          <h2>{t('fields_heading')}</h2>
+          <div className="row">
+            <h2 style={{ margin: 0 }}>{t('fields_heading')}</h2>
+            <button className="btn btn-sm right" onClick={translate} disabled={translating}
+              title={t('translate_tip')}>
+              {translating ? t('translating') : t('translate_btn')}
+            </button>
+          </div>
+          {trMsg && <p className="muted" style={{ margin: '4px 0 8px' }}>{trMsg}</p>}
           <div className="detail-grid">
             {fields.map((f) => (
               <div
