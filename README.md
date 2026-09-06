@@ -62,7 +62,7 @@ gitignored — never commit real credentials.
 - [x] FOUNDATION — repo, portable Postgres, config, auth (JWT + RBAC), health, authz tests
 - [x] EXTRACTION (prototype slice) — /extract with server-held Gemini key, per-user rate limit, usage log
 - [x] CUSTODY + EVIDENCE — intake manifests, documents (SHA-256 dedup 409), pages, evidence_crops, content-addressed storage, manifest verification
-- [x] PROCESSING — evidence-bound extraction runs (processing_runs, candidates), raw-output preservation, shared rate-limit bucket
+- [x] PROCESSING — evidence-bound extraction runs (processing_runs, candidates), raw-output preservation, shared rate-limit bucket; **vision extraction** (`POST /pages/{id}/extract-image`): the stored scan itself is the engine input (any Indic script — Gujarati VF-6 verified live), input hash = SHA-256 of the page bytes
 - [x] PROJECTIONS + DECISIONS — land_records/field_values state machine, apply_decision() single write path, claim lock (423) + optimistic versioning (409), human_decisions append-only
 - [x] VALIDATION — versioned deterministic rule registry (UP-profile v1), validation_results + anomalies, cross-document area-jump join, audited anomaly resolution, system auto-resolution on re-validation
 - [x] AUDIT — hash-chained audit_events (trigger-enforced append-only), emitted in the decision transaction, /audit/events + chain-head + verify

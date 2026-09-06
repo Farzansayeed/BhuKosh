@@ -38,7 +38,7 @@ class Settings(BaseSettings):
 
     # Extraction engine (Mode A / demo fixtures)
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.6-flash"
+    gemini_model: str = "gemini-3.7-flash"
 
     # /extract per-user rate limit (sliding window over successful calls)
     extract_rate_limit_per_min: int = 5

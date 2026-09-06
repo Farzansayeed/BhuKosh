@@ -33,6 +33,94 @@ class ExtractIn(BaseModel):
     page_id: int | None = None
 
 
+@router.post("/pages/{page_id}/extract-image", status_code=201)
+def extract_page_image(page_id: int, user: dict = Depends(require_roles(*WRITE_ROLES))) -> dict:
+    """Vision extraction: the stored page bytes ARE the engine input (evidence-bound).
+
+    Input hash = SHA-256 of the exact scan bytes sent to the model, so the run
+    replays against the identical image later.
+    """
+    s = get_settings()
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        page = conn.execute(
+            """SELECT p.id, p.document_id, p.seq_no, d.storage_uri
+                 FROM pages p JOIN documents d ON d.id = p.document_id
+                WHERE p.id = %s""",
+            (page_id,),
+        ).fetchone()
+    if page is None:
+        raise Problem(404, "Not Found", "No such page.")
+
+    rate_limit.enforce(user["username"], route="/extraction")
+
+    image_bytes = storage.open_uri(page["storage_uri"])
+    mime = "image/png" if image_bytes[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+    input_hash = storage.sha256_bytes(image_bytes)
+
+    with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+        run = conn.execute(
+            """INSERT INTO processing_runs
+                 (document_id, page_id, kind, engine_name, engine_version,
+                  prompt_id, prompt_version, input_hash, status)
+               VALUES (%s, %s, 'EXTRACT', 'gemini-vision', %s, %s, %s, %s, 'RUNNING')
+               RETURNING *""",
+            (page["document_id"], page_id, s.gemini_model, PROMPT_ID, PROMPT_VERSION, input_hash),
+        ).fetchone()
+        conn.commit()
+
+    try:
+        raw = gemini_client.structured_extract_image(image_bytes, mime, KHASRA_SCHEMA)
+        raw_doc = {
+            "run_id": run["id"],
+            "model": s.gemini_model,
+            "engine": "gemini-vision",
+            "prompt_id": PROMPT_ID,
+            "prompt_version": PROMPT_VERSION,
+            "input_sha256": input_hash,
+            "page_no": page["seq_no"],
+            "result": raw,
+        }
+        raw_bytes = json.dumps(raw_doc, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        uri = storage.save_document(raw_bytes, storage.sha256_bytes(raw_bytes))
+
+        with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+            for f in FIELDS:
+                v = raw.get(f)
+                conn.execute(
+                    """INSERT INTO candidates
+                         (run_id, field_type, raw_value, value, is_unknown, nbest_rank, engine)
+                       VALUES (%s, %s, %s, %s, %s, 1, 'gemini-vision')""",
+                    (run["id"], f, v, v, v is None),
+                )
+            conn.execute(
+                "UPDATE processing_runs SET status = 'SUCCEEDED', finished_at = now(), "
+                "raw_output_uri = %s WHERE id = %s",
+                (uri, run["id"]),
+            )
+            conn.execute(
+                """INSERT INTO api_usage (username, route, status, model, prompt_chars, result_json)
+                   VALUES (%s, '/extraction', 'ok', %s, 0, %s)""",
+                (user["username"], s.gemini_model,
+                 Jsonb({"run_id": run["id"], "mode": "image", "candidates": len(FIELDS)})),
+            )
+            conn.commit()
+    except Exception as e:
+        err = str(e) if isinstance(e, Problem) else e.__class__.__name__  # sanitized, always
+        with psycopg.connect(conninfo(), row_factory=dict_row) as conn:
+            conn.execute(
+                "UPDATE processing_runs SET status = 'FAILED', finished_at = now(), error = %s WHERE id = %s",
+                (err, run["id"]),
+            )
+            conn.execute(
+                "INSERT INTO api_usage (username, route, status, model, result_json) "
+                "VALUES (%s, '/extraction', 'error', %s, %s)",
+                (user["username"], s.gemini_model, Jsonb({"run_id": run["id"], "error": err})),
+            )
+            conn.commit()
+        raise
+    return {"run_id": run["id"], "status": "SUCCEEDED", "document_id": page["document_id"], "page_id": page_id, "fields": raw}
+
+
 @router.post("/documents/{doc_id}/extract", status_code=201)
 def extract_document(
     doc_id: int, body: ExtractIn, user: dict = Depends(require_roles(*WRITE_ROLES))

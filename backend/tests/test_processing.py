@@ -152,7 +152,7 @@ def test_run_lifecycle_with_stubbed_engine(tokens, monkeypatch):
     assert run["engine_name"] == "gemini"
     assert run["prompt_id"] == "khasra_register"
     assert run["page_id"] == combo["page"]["id"]
-    assert run["raw_output_uri"].startswith("file:")
+    assert run["raw_output_uri"].split(":", 1)[0] in ("file", "supabase")
     assert run["finished_at"] is not None
 
     assert len(cands) == 4
@@ -243,3 +243,77 @@ def test_get_run_and_list_runs(tokens, monkeypatch):
     assert client.get(
         "/extraction/runs/999999", headers={"Authorization": f"Bearer {tokens['operator']}"}
     ).status_code == 404
+
+
+# ------------------------------------------------------- vision (image) path ----
+
+def test_vision_extract_lifecycle(tokens, monkeypatch):
+    """Image extraction: run bound to stored page bytes, engine stubbed."""
+    from app.extract import gemini_client
+
+    monkeypatch.setattr(
+        gemini_client, "structured_extract_image",
+        lambda image_bytes, mime, schema, **kw: {
+            "khasra_no": "૫૫૯", "owner_name": "ભુલાજી ખોડાજી",
+            "area_raw": "41.76", "village": "ઓઢવ",
+        },
+    )
+    combo = _make_doc_with_page(tokens["operator"])
+    page_id = combo["page"]["id"]
+
+    r = client.post(
+        f"/pages/{page_id}/extract-image",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert r.status_code == 201, r.text
+    payload = r.json()
+    assert payload["status"] == "SUCCEEDED"
+    assert payload["page_id"] == page_id
+    assert payload["fields"]["area_raw"] == "41.76"
+
+    run_id = payload["run_id"]
+    detail = client.get(
+        f"/extraction/runs/{run_id}",
+        headers={"Authorization": f"Bearer {tokens['auditor']}"},
+    ).json()
+    run = detail["run"]
+    assert run["status"] == "SUCCEEDED"
+    assert run["engine_name"] == "gemini-vision"
+    assert run["document_id"] == combo["document"]["id"]
+    assert run["page_id"] == page_id
+    # input hash = sha256 of the exact stored page bytes
+    assert run["input_hash"] == combo["document"]["sha256"]
+    assert run["raw_output_uri"].split(":", 1)[0] in ("file", "supabase")
+
+    by_field = {c["field_type"]: c for c in detail["candidates"]}
+    assert set(by_field) == {"khasra_no", "owner_name", "area_raw", "village"}
+    assert all(c["engine"] == "gemini-vision" for c in detail["candidates"])
+    assert by_field["area_raw"]["value"] == "41.76"
+    assert not any(c["is_unknown"] for c in detail["candidates"])
+
+
+def test_vision_run_failure_is_sanitized(tokens, monkeypatch):
+    """Engine blowup -> FAILED run with a sanitized error class, never a 500."""
+    from app.extract import gemini_client
+    from app.errors import Problem
+
+    def boom(image_bytes, mime, schema, **kw):
+        raise Problem(502, "Engine Error", "Extraction engine returned HTTP 503.")
+
+    monkeypatch.setattr(gemini_client, "structured_extract_image", boom)
+    combo = _make_doc_with_page(tokens["operator"])
+
+    r = client.post(
+        f"/pages/{combo['page']['id']}/extract-image",
+        headers={"Authorization": f"Bearer {tokens['operator']}"},
+    )
+    assert r.status_code == 502, r.text
+    assert "503" in r.json()["detail"]
+
+    runs = client.get(
+        f"/documents/{combo['document']['id']}/runs",
+        headers={"Authorization": f"Bearer {tokens['checker']}"},
+    ).json()
+    failed = [x for x in runs if x["status"] == "FAILED"]
+    # Problem errors store their (already client-safe) message; raw exceptions store only the class name.
+    assert failed and "HTTP 503" in failed[0]["error"]
