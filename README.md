@@ -33,7 +33,7 @@ care about: **can you trust it, and can you prove it?**
    records for the same village+khasra agreeing on area), document integrity, and human authority. A
    VERIFIED record can still fail honestly when evidence contradicts it; the external LRMS/DILRMP cross-check
    is an explicit adapter slot, never faked.
-4. **Tamper-evident provenance.** The audit trail is a hash chain enforced by database triggers — rows cannot
+4. **Tamper-evident provenance.** The audit trail is a hash chain enforced by database triggers (appends serialize on a Postgres advisory lock, so concurrent actions can never fork it) — rows cannot
    be edited or deleted, and `/audit/verify` re-checks the whole chain. Exports are immutable snapshots with
    an evidence manifest (document hashes, rulebook version, full decision trail).
 5. **A real workflow, not a form.** Claim locks (HTTP 423), optimistic versioning (HTTP 409), mandatory

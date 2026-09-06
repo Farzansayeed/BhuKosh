@@ -4,6 +4,12 @@
 each event to the previous row's payload_hash. `verify()` walks the whole
 chain recomputing hashes — any edit, fork, or forged row is detected. Rows
 cannot be updated or deleted (trigger), so the only way in is INSERT.
+
+Concurrency: appends serialize on a transaction-scoped Postgres advisory lock
+(pg_advisory_xact_lock). Without it, two simultaneous transactions could both
+read the same "last" row and chain off it — a forked chain (a real bug we hit
+once: two admin actions in the same second produced seq 140/141 with the same
+parent). The lock is cluster-wide, so local and cloud writers serialize too.
 """
 import hashlib
 import json
@@ -12,6 +18,10 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ..db import conninfo
+
+# Arbitrary fixed key for pg_advisory_xact_lock — just needs to be unique
+# within the database's advisory-lock namespace.
+_APPEND_LOCK_KEY = 745638923111
 
 
 def _canonical(entity_refs: dict) -> str:
@@ -25,8 +35,10 @@ def compute_hash(prev_hash: str | None, actor: str, action: str, entity_refs: di
 
 def append(conn, actor: str, action: str, entity_refs: dict) -> int:
     """Insert one chained event using an existing transaction/conn. Returns seq."""
+    # Serialize read-last-hash + insert across ALL transactions/processes.
+    conn.execute("SELECT pg_advisory_xact_lock(%s)", (_APPEND_LOCK_KEY,))
     last = conn.execute(
-        "SELECT payload_hash FROM audit_events ORDER BY seq DESC LIMIT 1 FOR UPDATE"
+        "SELECT payload_hash FROM audit_events ORDER BY seq DESC LIMIT 1"
     ).fetchone()
     prev_hash = last["payload_hash"] if last else None
     row = conn.execute(
