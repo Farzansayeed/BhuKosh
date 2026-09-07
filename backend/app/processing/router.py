@@ -83,6 +83,12 @@ def extract_page_image(page_id: int, engine: str = "gemini", user: dict = Depend
     hints_count = sum(1 for ln in hints.splitlines() if ln.startswith("- "))
 
     engine_id = engine if engine in ("gemini", "openrouter", "groq") else "gemini"
+    # Gemini reads PDFs natively; the OpenAI-compatible image_url path
+    # (OpenRouter/Groq) does not accept PDF data-URLs — fail honestly upfront
+    # instead of a confusing engine 400.
+    if is_pdf and engine_id != "gemini":
+        raise Problem(422, "Unsupported Engine For PDF",
+                      f"'{engine_id}' cannot read scanned PDFs — use the Gemini engine for PDF pages, or upload the page as an image.")
     engine_label = f"{engine_id}-vision"
     try:
         model_version = engine_svc._ENGINES[engine_id]["model"]()

@@ -163,7 +163,7 @@ def _groq_call(prompt: str, schema: dict, image_b64: str | None, mime: str | Non
             continue
         break
     if resp.status_code != 200:
-        raise Problem(502, "Engine Error", f"Groq returned HTTP {resp.status_code}.")
+        raise _engine_http_error("Groq", resp)
     try:
         data = resp.json()
         text = data["choices"][0]["message"]["content"]
@@ -195,6 +195,17 @@ def groq_structured_image(image_bytes: bytes, mime: str, schema: dict, prompt: s
 
 
 # ---------- OpenRouter (OpenAI-compatible; free models on one key) ----------
+
+def _engine_http_error(provider: str, resp) -> Problem:
+    """Turn a non-200 engine response into a Problem that carries the
+    provider's own explanation (usually the only way to know WHY — e.g.
+    OpenRouter 400 = model rejects the content type or the schema hint)."""
+    try:
+        detail = resp.json().get("error", {}).get("message") or resp.text[:300]
+    except ValueError:
+        detail = resp.text[:300]
+    return Problem(502, "Engine Error", f"{provider} returned HTTP {resp.status_code}: {detail}")
+
 
 def _openrouter_call(prompt: str, schema: dict, image_b64: str | None, mime: str | None,
                      timeout: float) -> dict:
@@ -243,7 +254,7 @@ def _openrouter_call(prompt: str, schema: dict, image_b64: str | None, mime: str
             continue
         break
     if resp.status_code != 200:
-        raise Problem(502, "Engine Error", f"OpenRouter returned HTTP {resp.status_code}.")
+        raise _engine_http_error("OpenRouter", resp)
     try:
         data = resp.json()
         text = data["choices"][0]["message"]["content"].strip()
