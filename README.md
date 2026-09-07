@@ -55,7 +55,7 @@ flowchart TD
     STORE[("🗄️ Content-addressed storage<br/>documents + pages keyed by SHA-256<br/>byte-identical re-upload → 409")]
     LAYOUT["🔍 LAYOUT — the vision engine reads the scan<br/>per field: value · bounding box · confidence 0–1"]
     CROPS["✂️ Evidence crops<br/>the exact pixels per field,<br/>content-addressed"]
-    EXTRACT["🤖 EXTRACTION — 12 fields, schema-locked JSON<br/>raw engine output preserved verbatim<br/>every run logs engine · model · prompt version · input hash"]
+    EXTRACT["🤖 EXTRACTION — engine of your choice<br/>Gemini · OpenRouter MiniMax · Groq<br/>12 fields, schema-locked JSON<br/>every run logs engine · model · prompt version · input hash"]
     RULES{"⚖️ REASONING — 5 versioned rules<br/>pattern · area format · missing identity<br/>unknown field · cross-record area jump"}
     VALIDATED["VALIDATED"]
     REVIEW["REVIEW_REQUIRED<br/>anomaly with a plain-language<br/>explanation + linked evidence"]
@@ -120,6 +120,18 @@ append-only audit trail around every decision. The stage-by-stage detail:
   numbers script-neutral), stored per field in `field_values.translations` — the original value is
   never modified, and human corrections wipe stale renderings. The record page shows the rendering
   in the operator's UI language beneath the original (evidence) value
+
+**Multi-engine, engine-agnostic AI (`GET /engines`)**
+- Uploaders pick the engine **per job** from cards that state each engine's honest strengths and
+  limitations (e.g. "vision capable" vs "text mode only") — BhuKosh is not married to one AI provider,
+  which is exactly what a government deployment wants (plug in whichever model your state's data centre hosts)
+- Three engines ship: **Google Gemini** (primary — best free accuracy on handwritten Indic scripts,
+  vision + text), **OpenRouter MiniMax-M3 :free** (independent quota, vision + text), **Groq qwen**
+  (fastest text path; vision disabled on its free tier — labeled in the UI)
+- Every run still records `engine_name` + `engine_version` in the evidence chain, so any value traces
+  to exactly which AI read it; a 429 storm on one provider never blocks extraction — switch engines and continue
+- Engines implement one structured-output contract (`app/engines.py`); keys are server-held only,
+  availability is reported live in the catalog
 
 **AI extraction (12 fields, any Indic script)**
 - Core fields gate workflow routing: `khasra_no`, `owner_name`, `area_raw`, `village`
@@ -198,7 +210,7 @@ All endpoints are JWT-authenticated except `/health`. Interactive docs: `/docs` 
 |---|---|
 | Auth | `POST /auth/login` · `POST /auth/refresh` · `GET /auth/me` |
 | Custody (source of truth for scans) | `POST /intake` · `GET /intake/{id}` · `POST /documents` · `GET /documents/{id}` · `POST /documents/{id}/pages` · `GET /documents/{id}/content` |
-| Extraction | `POST /extract` (text prototype) · `POST /documents/{id}/extract` (evidence-bound text) · `POST /pages/{id}/extract-image` (vision: images + PDFs) · `GET /extraction/runs/{id}` · `GET /documents/{id}/runs` |
+| Extraction | `POST /extract` (text prototype) · `POST /documents/{id}/extract` (evidence-bound text, `?engine=`) · `POST /pages/{id}/extract-image` (vision, `?engine=`) · `GET /engines` (catalog) · `GET /extraction/runs/{id}` · `GET /documents/{id}/runs` |
 | Evidence | `GET /fields/{id}/replay` · `GET /crops/{id}/image` |
 | Records & workflow | `GET /records` · `GET /records/{id}` · `POST /records/from-run/{id}` · `POST /records/{id}/claim` · `POST /records/{id}/release` · `POST /records/{id}/decisions` (approve/reject/certify/reopen/correct) · `POST /records/{id}/validate` · `GET /records/{id}/validation` · `GET /records/{id}/verify` (truth assurance) |
 | Anomalies | `GET /anomalies` · `GET /anomalies/{id}` · `POST /anomalies/{id}/resolve` |
@@ -222,7 +234,10 @@ Browser (React/Vite SPA, same-origin /api)
    │
    ├─ Supabase Postgres (transaction pooler :6543, sslmode=require)   ← all 14 tables
    ├─ Supabase Storage (private `bhukosh` bucket)                     ← scan bytes + crops + raw outputs
-   └─ Google Gemini (gemini-3.7-flash, server-held key)               ← vision + text extraction
+   └─ AI engines (server-held keys, `app/engines.py` registry)   ← vision + text extraction
+         ├─ Google Gemini (gemini-3.7-flash)         — primary
+         ├─ OpenRouter (minimax-m3:free)             — vision + text, independent quota
+         └─ Groq (qwen text)                         — fastest text path
 ```
 
 - **Database (current):** Supabase Postgres in production — dedicated app role, transaction pooler, TLS.
@@ -230,8 +245,18 @@ Browser (React/Vite SPA, same-origin /api)
   migrations, same seed scripts, zero internet needed. `DATABASE_URL` set vs empty picks the mode.
 - **Object storage:** Supabase Storage (private bucket) in production; local `data/` directory offline.
   `app/storage.py` auto-selects (`STORAGE_BACKEND=auto`). Everything is content-addressed by SHA-256.
-- **AI engine:** Google Gemini, schema-locked JSON output, temperature 0. Transient 429/503s retry with
-  backoff; engine failures mark the run FAILED with a sanitized error and full usage logging.
+- **AI engines (multi-engine registry):** all engines implement one structured-output contract.
+  **Google Gemini** (`gemini-3.7-flash`) — primary, schema-locked JSON, temperature 0, transient
+  429/503 retried with backoff. **OpenRouter** (`minimax/minimax-m3:free`) — independent quota,
+  vision + text, chosen by bake-off (below). **Groq** (`qwen` text models) — fastest text path;
+  its free tier has no vision models, so the UI labels it "text mode only". Engine failures mark the
+  run FAILED with a sanitized error; every call is logged to `api_usage` with engine + model recorded.
+- **The engine bake-off** (how the lineup was chosen): OpenRouter's live catalog was scanned for free
+  vision-capable models (11 found) and the top candidates were tested against a real Gujarati
+  inheritance-form scan (`VF-6`). MiniMax-M3 :free read the scan correctly in ~4 s; Gemma free models
+  were quota-saturated upstream; other free models lacked image input or an open endpoint. On Groq,
+  Llama-4-scout (its former vision model) is retired, leaving text-only qwen — verified extracting
+  structured Hindi text in ~3.6 s. Gemini remains primary for handwritten Indic accuracy.
 - **Data model:** 14 core tables across 8 migrations — users, api_usage, intake_manifests, documents, pages,
   evidence_crops, processing_runs, candidates, land_records, field_values, human_decisions, anomalies,
   validation_results, audit_events, exports.
@@ -281,7 +306,9 @@ npm run build      # production bundle in dist/
 | `DATABASE_URL` | Supabase Postgres URI (pooler :6543). Empty → local mode via `PG_*` |
 | `PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD` | Local Postgres connection |
 | `JWT_SECRET`, `JWT_ALG`, `ACCESS_TOKEN_MINUTES`, `REFRESH_TOKEN_DAYS` | Auth |
-| `GEMINI_API_KEY`, `GEMINI_MODEL` | AI engine (default `gemini-3.7-flash`) |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Primary AI engine (default `gemini-3.7-flash`) |
+| `OPENROUTER_API_KEY`, `OPENROUTER_VISION_MODEL`, `OPENROUTER_TEXT_MODEL` | Second engine (default MiniMax-M3 :free) |
+| `GROQ_API_KEY`, `GROQ_TEXT_MODEL` | Third engine — text path only (free tier has no vision) |
 | `EXTRACT_RATE_LIMIT_*` | Per-user extraction quota |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `STORAGE_BACKEND` | Object storage (auto by default) |
 | `APP_NAME`, `ENV`, `HOST`, `PORT` | Basics |
@@ -297,6 +324,7 @@ sih26018/
 │   │   ├── custody/            #   intake manifests, documents, pages (chain of custody)
 │   │   ├── processing/         #   extraction runs + vision path + evidence crops
 │   │   ├── extract/            #   Gemini client, schemas, prompt ledger, rate limit
+│   │   ├── engines.py          #   multi-engine registry: Gemini / OpenRouter / Groq
 │   │   ├── records/            #   land_records state machine + decisions
 │   │   ├── rules/              #   validation registry + anomaly service
 │   │   ├── evidence.py         #   /fields/{id}/replay provenance chain
@@ -327,7 +355,8 @@ are PROVENANCE/TRUSTED OUTPUT — so the codebase reads the same way the pitch d
 - **The seeded credentials are public** (they're in this repo on purpose, so judges can log in). Before any
   real deployment: rotate passwords, disable seed users, issue real ones.
 - **Gemini quota is shared** across the free-tier key — heavy testing can hit 429s; the client retries with
-  backoff and surfaces a sanitized problem if the engine is unavailable.
+  backoff and surfaces a sanitized problem if the engine is unavailable. Mitigation: switch engines from the
+  upload page (OpenRouter/Groq have independent quotas).
 - **Serverless cold starts**: the first request after idle takes a few seconds.
 - **Prototype-level by design:** the learning loop is prompt-injection (few-shot), not fine-tuning;
   government-system integration is via the documented API + evidence-manifested exports (no direct LRMS
