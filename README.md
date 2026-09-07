@@ -41,8 +41,9 @@ care about: **can you trust it, and can you prove it?**
 6. **It learns from its reviewers.** Human corrections are injected as few-shot guidance into future
    extraction prompts — and the loop is inspectable at `GET /learning/hints` (see the exact lessons the
    engine currently carries, and the decision trail behind each one).
-7. **Multilingual from day one.** Verified live on Devanagari (UP khatauni registers) and Gujarati (VF-6
-   inheritance forms); the extraction schema is script-agnostic by design.
+7. **Multilingual end to end.** The engine reads any Indic script (verified live on Devanagari khatauni
+   registers and Gujarati VF-6 forms), the interface itself runs in EN / हिन्दी / ગુજરાતી, and extracted
+   values can be rendered into all three languages on demand — original script always preserved as evidence.
 8. **Runs anywhere.** Identical code against a local offline Postgres (courts/tahsils with no internet) or
    a cloud deployment (Supabase + Vercel) — selected by one environment variable.
 
@@ -96,7 +97,7 @@ append-only audit trail around every decision. The stage-by-stage detail:
 |---|---|---|
 | SOURCE | Scanned pages enter through a **signed intake manifest** (register ref, centre, device, expected count, per-page SHA-256 hash-of-hashes verification). | `intake_manifests` |
 | EVIDENCE | Documents are stored **content-addressed by SHA-256** — byte-identical re-uploads deduplicate (HTTP 409). Pages are registered with sequence + hashes. | `documents`, `pages` |
-| LAYOUT | The vision engine reads the scan and returns, per field: the value, a **bounding box** (0–1000 normalized), and a **confidence score**. Each box is cut from the scan (with padding) into a content-addressed **evidence crop**. | `evidence_crops`, `candidates.crop_id` |
+| LAYOUT | The vision engine (Gemini or OpenRouter) reads the scan and returns, per field: the value, a **bounding box** (0–1000 normalized), and a **confidence score**. Each box is cut from the scan (with padding) into a content-addressed **evidence crop**. | `evidence_crops`, `candidates.crop_id` |
 | EXTRACTION | 12 land-record fields extracted per page (see Features). Raw engine output is preserved verbatim in storage; the run records engine, model, prompt id + version, input hash, status, and timings. | `processing_runs`, `candidates`, `api_usage` |
 | REASONING | Versioned deterministic rules validate the extraction: pattern sanity, area-format convention, missing identity, unreadable fields, and cross-record area jumps. Failures create **anomalies with plain-language explanations**. | `validation_results`, `anomalies` |
 | VERIFICATION | Records project into a strict state machine. Humans claim, approve, correct, reject, reopen, and certify — every step is a versioned, reason-tracked, hash-chained decision. | `land_records`, `field_values`, `human_decisions` |
@@ -137,8 +138,8 @@ append-only audit trail around every decision. The stage-by-stage detail:
 - Core fields gate workflow routing: `khasra_no`, `owner_name`, `area_raw`, `village`
 - Extended fields captured when the document carries them: `khata_no`, `survey_no`, `tehsil`, `district`,
   `land_classification`, `ownership_type`, `mutation_ref`, `registration_ref`
-- Two paths: **vision** (the stored scan itself is the engine input — images and scanned PDFs) and **text**
-  (pasted register lines, fast path)
+- Two paths: **vision** (the stored scan itself is the engine input — images on any engine, scanned
+  PDFs on Gemini, which reads them natively) and **text** (pasted register lines, fast path)
 - Schema-locked structured output; per-field **confidence 0–1**; core field < 0.6 or unreadable → review
 - **Document-level confidence** on every record: the *worst* field score (a record is as trustworthy as its
   weakest reading), color-banded ≥85 / ≥60 / <60 in the records list and record header; human-corrected
@@ -162,9 +163,38 @@ append-only audit trail around every decision. The stage-by-stage detail:
 - Claim/release with 15-minute locks; optimistic versioning; corrections update the field and keep the full
   before/after trail; certifier sign-off is a distinct, gated step
 
+**Records search, sort & history (migration 010)**
+- **Search** (`GET /records?search=…`): one term matches record ID (prefix — "14" finds #145), village,
+  khasra, and every extracted field value (owner, survey, tehsil, district…). Executed entirely in
+  Postgres on **pg_trgm GIN indexes** with similarity ranking — spontaneous, per-keystroke fast;
+  graceful fallback when the extension is unavailable
+- **Sort** (`sort_by`): id · village · khasra · state · version · updated · created · claim ·
+  **confidence** (scored first, best first) · **relevance** (similarity when searching) — with `order=asc|desc`
+- **Past vs current** (`GET /records/{id}/history`): the complete versioned story of a record — current
+  field values (what an export would contain) beside every decision that ever changed a value or state
+  (before → after, who, when, why), read from the append-only `human_decisions` table; current values
+  are a projection of this history, never an independent edit
+
+**Document integrity — duplicate & forged-scan detection (migration 010)**
+- **Perceptual duplicates**: every page carries a 64-bit perceptual hash (dHash); at check time each
+  page is compared against all other pages — ≤ 6 bits different = near-match, catching re-scans and
+  re-uploads that differ at the byte level (byte-identical uploads are already 409'd at intake)
+- **Vision forensics** (`POST /documents/{id}/integrity-vision`): a Gemini pass per page reports tamper
+  signals (inconsistent erasure, mismatched fonts, spliced regions, print-vs-handwriting anomalies) and
+  a verdict per page — CLEAN / SUSPECT / LIKELY_FORGED — stored as findings, explicitly labeled
+  *decision support only; a human reviewer decides*
+- **Learned identifier library** (`doc_identifiers`): stamps, seals, signatures and logos are learned
+  from **VERIFIED+ records only** (`POST /integrity/learn/{page_id}`) — the AI learns what genuine
+  documents look like from the corpus humans already certified, then future vision passes report
+  IDENTIFIER_MATCH / IDENTIFIER_MISSING against that library
+
 **Evidence & audit**
 - `GET /fields/{id}/replay` — the complete chain behind any displayed value, including the visual crop
 - `GET /crops/{id}/image` — the exact pixels, JWT-required
+- **Record document viewer**: every record page shows its source scan pinned top-right — sticky while
+  scrolling, one-click fullscreen expand, multi-document tabs with SHA-256 identity; fields the vision
+  engine read are **highlighted at their exact pixels** (boxes computed from stored evidence-crop bboxes),
+  and clicking a box or a value links the two
 - Hash-chained audit log (trigger-enforced append-only), chain head + full-chain verification endpoints
 - Learning loop: corrections → few-shot extraction guidance (`GET /learning/hints`)
 
@@ -212,7 +242,8 @@ All endpoints are JWT-authenticated except `/health`. Interactive docs: `/docs` 
 | Custody (source of truth for scans) | `POST /intake` · `GET /intake/{id}` · `POST /documents` · `GET /documents/{id}` · `POST /documents/{id}/pages` · `GET /documents/{id}/content` |
 | Extraction | `POST /extract` (text prototype) · `POST /documents/{id}/extract` (evidence-bound text, `?engine=`) · `POST /pages/{id}/extract-image` (vision, `?engine=`) · `GET /engines` (catalog) · `GET /extraction/runs/{id}` · `GET /documents/{id}/runs` |
 | Evidence | `GET /fields/{id}/replay` · `GET /crops/{id}/image` |
-| Records & workflow | `GET /records` · `GET /records/{id}` · `POST /records/from-run/{id}` · `POST /records/{id}/claim` · `POST /records/{id}/release` · `POST /records/{id}/decisions` (approve/reject/certify/reopen/correct) · `POST /records/{id}/validate` · `GET /records/{id}/validation` · `GET /records/{id}/verify` (truth assurance) |
+| Records & workflow | `GET /records` (`?search=&sort_by=&order=&limit=`) · `GET /records/{id}` · `GET /records/{id}/history` (past vs current) · `GET /records/{id}/documents` (source files) · `POST /records/from-run/{id}` · `POST /records/{id}/claim` · `POST /records/{id}/release` · `POST /records/{id}/decisions` (approve/reject/certify/reopen/correct) · `POST /records/{id}/validate` · `GET /records/{id}/validation` · `GET /records/{id}/verify` (truth assurance) · `POST /records/{id}/translate` (multilingual output) |
+| Document integrity | `POST /documents/{id}/integrity-check` (perceptual duplicates) · `POST /documents/{id}/integrity-vision` (forensic pass) · `GET /documents/{id}/integrity` (stored findings) · `POST /integrity/learn/{page_id}` (learn identifiers from VERIFIED records) |
 | Anomalies | `GET /anomalies` · `GET /anomalies/{id}` · `POST /anomalies/{id}/resolve` |
 | Audit | `GET /audit/events` · `GET /audit/chain-head` · `GET /audit/verify` |
 | Admin | `GET/POST /admin/users` · `POST /admin/users/{u}/password` · `POST /admin/users/{u}/role` · `POST /admin/users/{u}/active` · `GET /admin/permissions` · `GET /admin/permissions/{p}/overlap` · `POST /admin/permissions/{role}/{p}` · `POST /admin/records/{id}/force-release` |
@@ -221,7 +252,7 @@ All endpoints are JWT-authenticated except `/health`. Interactive docs: `/docs` 
 | Ops | `GET /health` |
 
 Extraction is rate-limited per user (sliding window, default 5/min) and every engine call is logged to
-`api_usage`. The Gemini key lives only on the server — clients never see it.
+`api_usage`. All engine keys live only on the server — clients never see them.
 
 ## Architecture & services
 
@@ -232,7 +263,7 @@ Browser (React/Vite SPA, same-origin /api)
    ├─ Vercel (Python serverless, bhukosh-api.vercel.app) ◄────────────────────┘
    │     └─ FastAPI app (this repo, backend/)
    │
-   ├─ Supabase Postgres (transaction pooler :6543, sslmode=require)   ← all 14 tables
+   ├─ Supabase Postgres (transaction pooler :6543, sslmode=require)   ← all 19 tables
    ├─ Supabase Storage (private `bhukosh` bucket)                     ← scan bytes + crops + raw outputs
    └─ AI engines (server-held keys, `app/engines.py` registry)   ← vision + text extraction
          ├─ Google Gemini (gemini-3.7-flash)         — primary
@@ -257,9 +288,10 @@ Browser (React/Vite SPA, same-origin /api)
   were quota-saturated upstream; other free models lacked image input or an open endpoint. On Groq,
   Llama-4-scout (its former vision model) is retired, leaving text-only qwen — verified extracting
   structured Hindi text in ~3.6 s. Gemini remains primary for handwritten Indic accuracy.
-- **Data model:** 14 core tables across 8 migrations — users, api_usage, intake_manifests, documents, pages,
+- **Data model:** 19 tables across 11 migrations — users, api_usage, intake_manifests, documents, pages,
   evidence_crops, processing_runs, candidates, land_records, field_values, human_decisions, anomalies,
-  validation_results, audit_events, exports.
+  validation_results, audit_events, exports, role_permissions, permission_catalog, doc_identifiers,
+  integrity_findings.
 - **Deployment:** push to `master` → both Vercel projects build and deploy automatically (Root Directories
   `backend/` and `frontend/`). Secrets live in Vercel's encrypted store; nothing sensitive is in the repo.
 
@@ -325,7 +357,10 @@ sih26018/
 │   │   ├── processing/         #   extraction runs + vision path + evidence crops
 │   │   ├── extract/            #   Gemini client, schemas, prompt ledger, rate limit
 │   │   ├── engines.py          #   multi-engine registry: Gemini / OpenRouter / Groq
-│   │   ├── records/            #   land_records state machine + decisions
+│   │   ├── integrity.py        #   duplicate + forged-scan detection, identifier learning
+│   │   ├── i18n_output.py      #   multilingual rendering of extracted values
+│   │   ├── verification.py     #   truth-assurance verdict engine (+ router)
+│   │   ├── records/            #   land_records state machine + decisions + search/history
 │   │   ├── rules/              #   validation registry + anomaly service
 │   │   ├── evidence.py         #   /fields/{id}/replay provenance chain
 │   │   ├── audit/              #   hash-chained audit events + verification
@@ -339,9 +374,11 @@ sih26018/
 │   ├── tests/                  # pytest suite (stubbed engine — CI-safe, no quota)
 │   └── requirements.txt
 ├── frontend/                   # React + Vite SPA
-│   └── src/pages/              # Login, Dashboard, Records, RecordView, Upload, Audit
+│   └── src/
+│       ├── pages/              # Login, Dashboard, Records, RecordView, Upload, Audit, Admin
+│       └── DocViewer.jsx …     # scan viewer with pixel highlights, crops, confidence chips
 ├── infra/
-│   ├── migrations/             # 8 SQL migrations (the whole 14-table data model)
+│   ├── migrations/             # 11 SQL migrations (the whole 19-table data model)
 │   └── pgdata/                 # portable local Postgres cluster (offline mode)
 └── scripts/pg_start.bat        # local PG helper
 ```
