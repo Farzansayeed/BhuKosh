@@ -1,2 +1,8 @@
+[project]
+name = "bhukosh-api"
+version = "0.1.0"
+description = "BhuKosh — Intelligent Land Record Digitization & Validation System (SIH26018)"
+requires-python = ">=3.12"
+
 [tool.vercel]
 entrypoint = "backend.api.index:app"
