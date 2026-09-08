@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- tile: dark panel with border, matches app theme -->
+  <rect x="1.5" y="1.5" width="61" height="61" rx="14" fill="#171a21" stroke="#2a2f3a" stroke-width="3"/>
+  <!-- land parcel (khasra plot) -->
+  <path d="M17 47 L17 27 L27 17 L47 23 L47 47 Z" fill="#4f8cff"/>
+  <!-- verified checkmark -->
+  <path d="M25 37 L32 44 L45 28" fill="none" stroke="#0f1115" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

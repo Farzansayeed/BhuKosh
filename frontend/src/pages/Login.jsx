@@ -30,7 +30,7 @@ export default function LoginPage() {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
       <form onSubmit={submit} className="card" style={{ width: 360 }}>
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div className="brand" style={{ padding: 0 }}>Bhu<span>Kosh</span></div>
+          <div className="brand" style={{ padding: 0 }}><img src="/favicon.svg" alt="" width="24" height="24" style={{ verticalAlign: '-5px', marginRight: 7, borderRadius: 6 }} />Bhu<span>Kosh</span></div>
           <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={t('language')} style={{ fontSize: 12 }}>
             {LANGS.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
           </select>

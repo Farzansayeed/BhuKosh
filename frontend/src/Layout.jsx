@@ -18,7 +18,7 @@ export function Layout() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="brand">Bhu<span>Kosh</span></div>
+        <div className="brand"><img src="/favicon.svg" alt="" width="22" height="22" style={{ verticalAlign: '-4px', marginRight: 6, borderRadius: 5 }} />Bhu<span>Kosh</span></div>
         <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t('nav_dashboard')}</NavLink>
         <NavLink to="/records" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t('nav_records')}</NavLink>
         <NavLink to="/upload" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>{t('nav_upload')}</NavLink>
